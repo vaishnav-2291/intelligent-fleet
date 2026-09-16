@@ -185,7 +185,7 @@ const handleAIChat = async (req, res) => {
   }
 
   try {
-    const aiResponse = await processFleetAIQuery(message, sessionId, req.user);
+    const aiResponse = await processFleetAIQuery(message, sessionId, req.user, req.body);
     res.status(200).json(aiResponse);
   } catch (err) {
     res.status(500).json({

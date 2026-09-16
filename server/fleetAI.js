@@ -269,7 +269,7 @@ export function determineIntent(message, context = {}) {
 /**
  * Core AI Fleet Query Handler
  */
-export async function processFleetAIQuery(userMessage, sessionId, user = null) {
+export async function processFleetAIQuery(userMessage, sessionId, user = null, extraPayload = {}) {
   const queryText = String(userMessage || '').trim();
   const context = getSessionContext(sessionId);
 
@@ -308,53 +308,94 @@ export async function processFleetAIQuery(userMessage, sessionId, user = null) {
   let responseData = {};
   let operation = 'INSPECT';
 
-  // Check if query is an open-ended conversational recommendation rather than a deterministic operational query
-  if (intent === 'FLEET_AI') {
-    const primaryWebhookUrl = process.env.VITE_SNS_WEBHOOK_URL || 'https://api.agents.snsihub.ai/webhook/4b3c6594-0dfc-4104-b031-8c0018e0ec3d';
+  // ============================================================
+  // PRIMARY ORCHESTRATION: SNS Agent Workbench Production Webhook
+  // Attempt SNS Workbench for EVERY /api/ai/chat query first.
+  // ============================================================
+  const primaryWebhookUrl =
+    process.env.VITE_SNS_WEBHOOK_URL ||
+    'https://api.agents.snsihub.ai/webhook/4b3c6594-0dfc-4104-b031-8c0018e0ec3d';
+
+  const isErrorOrQuota = (str) => {
+    if (!str || typeof str !== 'string') return true;
+    const s = str.toLowerCase();
+    return (
+      s.includes('quota') ||
+      s.includes('rate-limit') ||
+      s.includes('rate limit') ||
+      s.includes('generativelanguage.googleapis.com') ||
+      s.includes('exceeded your current quota') ||
+      s.startsWith('error:') ||
+      s.includes('error: you exceeded') ||
+      s.startsWith('internal server error')
+    );
+  };
+
+  console.log(`[fleetAI] Attempting primary SNS Agent Workbench webhook (${primaryWebhookUrl}) for session: "${sessionId}", intent: "${intent}"`);
+
+  try {
+    const wbPayload = {
+      ...(typeof extraPayload === 'object' && extraPayload !== null ? extraPayload : {}),
+      message: queryText,
+      sessionId: sessionId || 'default-session',
+      action: intent || 'FLEET_AI',
+      intent
+    };
+    // Ensure core values are always authoritative
+    wbPayload.message = queryText;
+    wbPayload.sessionId = sessionId || 'default-session';
+
+    const wbRes = await fetch(primaryWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(wbPayload),
+      signal: AbortSignal.timeout(15000)
+    });
+
+    const rawText = await wbRes.text();
+    let wbJson = null;
     try {
-      const wbRes = await fetch(primaryWebhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'FLEET_AI',
-          message: queryText,
-          sessionId
-        }),
-        signal: AbortSignal.timeout(12000)
-      });
-      if (wbRes.ok) {
-        const wbJson = await wbRes.json();
-        const possibleOutput =
-          wbJson?.data?.result?.output ??
-          wbJson?.result?.output ??
-          wbJson?.data?.output ??
-          wbJson?.data?.message ??
-          (typeof wbJson?.output === 'string' ? wbJson?.output : null) ??
-          wbJson?.message ??
-          null;
-
-        const isErrorOrQuota = (str) => {
-          if (!str || typeof str !== 'string') return true;
-          const s = str.toLowerCase();
-          return s.includes('quota') ||
-                 s.includes('rate-limit') ||
-                 s.includes('rate limit') ||
-                 s.includes('generativelanguage.googleapis.com') ||
-                 s.includes('exceeded your current quota') ||
-                 s.startsWith('error:') ||
-                 s.includes('error: you exceeded');
-        };
-
-        if (typeof possibleOutput === 'string' && possibleOutput.trim() && !isErrorOrQuota(possibleOutput)) {
-          responseMessage = possibleOutput;
-          operation = 'WORKBENCH_AI_AGENT';
-        }
-      }
+      wbJson = JSON.parse(rawText);
     } catch {
-      // Fallback to live backend tools
+      console.warn(`[fleetAI] SNS Workbench returned non-JSON response (HTTP ${wbRes.status}):`, rawText.slice(0, 150));
     }
+
+    if (wbRes.ok && wbJson && !wbJson.error) {
+      // Preserve existing response extraction logic for Workbench responses
+      const possibleOutput =
+        wbJson?.data?.result?.output ??
+        wbJson?.result?.output ??
+        wbJson?.data?.output ??
+        wbJson?.data?.message ??
+        (typeof wbJson?.data?.result === 'string' ? wbJson.data.result : null) ??
+        (typeof wbJson?.output === 'string' ? wbJson?.output : null) ??
+        (typeof wbJson?.message === 'string' ? wbJson.message : null) ??
+        null;
+
+      if (typeof possibleOutput === 'string' && possibleOutput.trim() && !isErrorOrQuota(possibleOutput)) {
+        responseMessage = possibleOutput;
+        operation = 'WORKBENCH_AI_AGENT';
+        responseData = (wbJson?.data && typeof wbJson.data === 'object') ? wbJson.data : { rawResponse: wbJson };
+        if (Array.isArray(wbJson?.result)) {
+          resultList = wbJson.result;
+        } else if (Array.isArray(wbJson?.data?.result)) {
+          resultList = wbJson.data.result;
+        }
+        console.log(`[fleetAI] SNS Agent Workbench succeeded. Operation: WORKBENCH_AI_AGENT`);
+      } else {
+        console.warn(`[fleetAI] SNS Workbench response unusable or quota/error limited. Falling back to live deterministic backend tools. Output preview:`, typeof possibleOutput === 'string' ? possibleOutput.slice(0, 120) : 'null/empty');
+      }
+    } else {
+      console.warn(`[fleetAI] SNS Workbench returned HTTP ${wbRes.status} / error: ${wbJson?.error || 'Empty or error body'}. Falling back to live deterministic backend tools.`);
+    }
+  } catch (wbErr) {
+    console.warn(`[fleetAI] SNS Workbench invocation failed (${wbErr.name}: ${wbErr.message}). Falling back to live deterministic backend tools.`);
   }
 
+  // ============================================================
+  // DETERMINISTIC LIVE BACKEND TOOLS (FALLBACK ONLY)
+  // Executes only when Workbench fails, times out, returns error/quota, or gives no usable response.
+  // ============================================================
   if (!responseMessage) {
     try {
       switch (intent) {
