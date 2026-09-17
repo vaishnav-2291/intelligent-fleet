@@ -6,6 +6,10 @@ import {
   UserPlus, 
   Truck, 
   PlusCircle, 
+  Wrench,
+  Fuel,
+  ShieldCheck,
+  Activity,
   HelpCircle, 
   ChevronLeft, 
   ChevronRight, 
@@ -23,6 +27,10 @@ export const Sidebar = ({ activeTab, setActiveTab, mobileOpen, setMobileOpen }) 
     { id: 'add-driver', label: 'Add Driver', icon: UserPlus },
     { id: 'fleet', label: 'Fleet Roster', icon: Truck },
     { id: 'add-vehicle', label: 'Add Vehicle', icon: PlusCircle },
+    { id: 'maintenance', label: 'Maintenance Queue', icon: Wrench },
+    { id: 'fuel', label: 'Fuel Telemetry', icon: Fuel },
+    { id: 'safety', label: 'Safety Alerts', icon: ShieldCheck },
+    { id: 'analytics', label: 'Fleet Analytics', icon: Activity },
     { id: 'help', label: 'Help & Documentation', icon: HelpCircle },
   ];
 

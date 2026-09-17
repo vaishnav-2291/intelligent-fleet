@@ -873,6 +873,9 @@ export const FleetProvider = ({
   const [apiError, setApiError] =
     useState(null);
 
+  const [lastUpdated, setLastUpdated] =
+    useState(null);
+
   const [toast, setToast] =
     useState(null);
 
@@ -1421,6 +1424,28 @@ export const FleetProvider = ({
               );
             }
           }
+
+          /* =================================================
+             8. FLEET ANALYSIS & KPIS
+             ================================================= */
+          try {
+            const analysisRes = await getFleetAnalysis();
+            if (analysisRes) {
+              const normAnalysis = normalizeFleetAnalysis(analysisRes);
+              if (normAnalysis) {
+                setAnalysis(normAnalysis);
+              }
+            }
+          } catch (analysisErr) {
+            if (isDev) {
+              console.warn(
+                '[DEBUG FleetContext] getFleetAnalysis warning:',
+                analysisErr?.message
+              );
+            }
+          }
+
+          setLastUpdated(new Date());
         } catch (err) {
           const msg =
             err?.message ||
@@ -3431,6 +3456,8 @@ export const FleetProvider = ({
         showNotification,
 
         loading,
+        lastUpdated,
+        isRefreshing: Boolean(loading?.refreshing),
 
         error: apiError
       }}

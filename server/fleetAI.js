@@ -223,6 +223,11 @@ export function determineIntent(message, context = {}) {
     return context.lastIntent || 'VEHICLE';
   }
 
+  // Greetings / Help
+  if (/^(hi|hello|hey|good morning|good afternoon|good evening)\b|^\/?help\b/i.test(q)) {
+    return 'GREETING';
+  }
+
   // Driver Assignment questions: "Which driver is assigned to VH001?", "Who is driving VH104?", "Driver for VH104"
   if (/driver.*assigned|who is (driving|assigned to)|driver (for|of) vh\d{3}|assigned driver/i.test(q)) {
     return 'DRIVER_ASSIGNMENT';
@@ -256,14 +261,17 @@ export function determineIntent(message, context = {}) {
   if (/how many vehicles|analytics|fleet metrics|active count/i.test(q)) {
     return 'ANALYTICS';
   }
-  if (/recommendation|intelligent recommendation|suggest fleet|ai advice/i.test(q)) {
+  if (/recommendation|intelligent recommendation|suggest fleet|ai advice|suggestion|what should i do/i.test(q)) {
     return 'FLEET_AI';
   }
   if (/summary|analysis|performance|kpi|overview|health|fleet health/i.test(q)) {
     return 'FLEET_ANALYSIS';
   }
+  if (/fleet|logistics|depot|corridor|operations|vehicle|driver|trip/i.test(q)) {
+    return 'FLEET_AI';
+  }
 
-  return 'FLEET_AI';
+  return 'UNKNOWN';
 }
 
 /**
@@ -587,6 +595,24 @@ export async function processFleetAIQuery(userMessage, sessionId, user = null, e
         }
         const maintRecords = maintRes.data;
 
+        if (targetVehicleId) {
+          const vehRecords = maintRecords.filter(m => (m.vehicleId || '').toUpperCase() === targetVehicleId);
+          const pending = vehRecords.filter(m => (m.status || '').toLowerCase() !== 'completed');
+          if (pending.length > 0) {
+            responseMessage = `Yes, ${targetVehicleId} is due for maintenance: ${pending.map(m => `${m.description || m.maintenanceType} (${m.priority} priority, status: ${m.status})`).join('; ')}.`;
+            resultList = pending;
+            responseData = { vehicleId: targetVehicleId, dueMaintenance: pending };
+          } else if (vehRecords.length > 0) {
+            responseMessage = `${targetVehicleId} has no pending maintenance due. All previous recorded inspections are completed.`;
+            resultList = vehRecords;
+            responseData = { vehicleId: targetVehicleId, dueMaintenance: [] };
+          } else {
+            responseMessage = `No active maintenance records found for vehicle ${targetVehicleId} in the live database.`;
+            responseData = { vehicleId: targetVehicleId, dueMaintenance: [] };
+          }
+          break;
+        }
+
         const dueRecords = maintRecords.filter(m => (m.status || '').toLowerCase() !== 'completed');
         if (dueRecords.length > 0) {
           responseMessage = `There are ${dueRecords.length} vehicles requiring maintenance: ${dueRecords.map(m => `${m.vehicleId} (${m.description || m.maintenanceType} - ${m.priority} priority)`).join('; ')}.`;
@@ -624,6 +650,17 @@ export async function processFleetAIQuery(userMessage, sessionId, user = null, e
           } else {
             responseMessage = `Trip ${targetTripId} was not found in the live fleet database. That record was not found in the current fleet database.`;
           }
+        } else if (targetVehicleId) {
+          const vehTrips = trips.filter(tr => (tr.vehicleId || '').toUpperCase() === targetVehicleId);
+          if (vehTrips.length > 0) {
+            const activeT = vehTrips.find(t => t.status === 'ongoing' || t.status === 'in_progress') || vehTrips[0];
+            responseMessage = `Vehicle ${targetVehicleId} is associated with trip ${activeT.tripId || activeT.id} (${activeT.origin || activeT.source} → ${activeT.destination}, status: ${activeT.status}).`;
+            resultList = vehTrips;
+            responseData = { vehicleId: targetVehicleId, trips: vehTrips };
+          } else {
+            responseMessage = `No active or logged trips found for vehicle ${targetVehicleId} in the fleet database.`;
+            responseData = { vehicleId: targetVehicleId, trips: [] };
+          }
         } else if (qLower.includes('ongoing') || qLower.includes('active') || qLower.includes('in progress')) {
           const ongoing = trips.filter(t => t.status === 'ongoing' || t.status === 'in_progress' || t.status === 'active');
           responseMessage = `There are ${ongoing.length} ongoing trips: ${ongoing.map(t => `${t.tripId} (${t.origin} → ${t.destination}, vehicle ${t.vehicleId})`).join('; ')}.`;
@@ -648,10 +685,35 @@ export async function processFleetAIQuery(userMessage, sessionId, user = null, e
         }
         const alerts = safetyRes.data;
 
+        if (targetVehicleId) {
+          const vehAlerts = alerts.filter(a => (a.vehicleId || '').toUpperCase() === targetVehicleId);
+          if (vehAlerts.length > 0) {
+            responseMessage = `Vehicle ${targetVehicleId} has ${vehAlerts.length} safety alert(s): ${vehAlerts.map(a => `${a.alertType || a.description} (${a.severity} severity at ${a.location || 'corridor'})`).join('; ')}.`;
+            resultList = vehAlerts;
+            responseData = { vehicleId: targetVehicleId, alerts: vehAlerts };
+          } else {
+            responseMessage = `Vehicle ${targetVehicleId} has no active safety alerts in the live telemetry database.`;
+            responseData = { vehicleId: targetVehicleId, alerts: [] };
+          }
+          break;
+        }
+
         const critical = alerts.filter(a => (a.severity || '').toLowerCase() === 'critical');
         responseMessage = `Total safety alerts recorded: ${alerts.length}. Critical risk alerts: ${critical.length}. ${critical.length > 0 ? `Alert details: ${critical[0].description} on ${critical[0].location} (${critical[0].vehicleId}).` : ''}`;
         resultList = alerts;
         responseData = { alertsCount: alerts.length, criticalCount: critical.length };
+        break;
+      }
+
+      case 'GREETING': {
+        operation = 'GREETING';
+        responseMessage = 'Hello! I am your Intelligent Fleet Assistant. I provide live vehicle telemetry, driver rosters, trip tracking, maintenance schedules, fuel monitoring, and corridor route recommendations across Tamil Nadu hubs. How can I assist you today?';
+        break;
+      }
+
+      case 'UNKNOWN': {
+        operation = 'OUT_OF_SCOPE';
+        responseMessage = 'I am the Intelligent Fleet Assistant specialized exclusively in Tamil Nadu fleet operations, live vehicle telemetry, driver assignments, corridor routing, maintenance schedules, and fuel monitoring. Please ask a fleet or logistics-related operational question.';
         break;
       }
 

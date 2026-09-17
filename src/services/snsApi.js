@@ -549,17 +549,31 @@ export const getFleetSummary = async () => {
 
 export const getFleetAnalysis = async () => {
   try {
-    const res = await fetch('/api/analytics');
+    const res = await fetch('/api/analytics/analysis', { signal: AbortSignal.timeout(10000) });
     if (res.ok) {
       const json = await res.json();
       return {
         success: true,
         data: {
-          result: json.data
+          result: json.data || json
         }
       };
     }
-  } catch {}
+  } catch (_) {}
+
+  try {
+    const res = await fetch('/api/analytics', { signal: AbortSignal.timeout(10000) });
+    if (res.ok) {
+      const json = await res.json();
+      return {
+        success: true,
+        data: {
+          result: json.data || json
+        }
+      };
+    }
+  } catch (_) {}
+
   return {
     success: false,
     message: FLEET_AI_UNAVAILABLE_MESSAGE,
@@ -2007,12 +2021,25 @@ export const normalizeMaintenance = (
       raw._id ||
       ''
     ),
+    maintenanceId: String(
+      raw.maintenanceId ||
+      raw.id ||
+      raw._id ||
+      ''
+    ),
 
     vehicle_id:
       raw.vehicleId ||
       raw.vehicle_id,
+    vehicleId:
+      raw.vehicleId ||
+      raw.vehicle_id,
 
     maintenance_type:
+      raw.maintenanceType ||
+      raw.maintenance_type ||
+      'Scheduled Service',
+    maintenanceType:
       raw.maintenanceType ||
       raw.maintenance_type ||
       'Scheduled Service',
@@ -2029,8 +2056,15 @@ export const normalizeMaintenance = (
     due_date:
       raw.dueDate ||
       raw.due_date,
+    dueDate:
+      raw.dueDate ||
+      raw.due_date,
 
     completed_date:
+      raw.completedDate ||
+      raw.completed_date ||
+      null,
+    completedDate:
       raw.completedDate ||
       raw.completed_date ||
       null,
@@ -2039,8 +2073,16 @@ export const normalizeMaintenance = (
       raw.mileageAtService ||
       raw.mileage_at_service ||
       null,
+    mileageAtService:
+      raw.mileageAtService ||
+      raw.mileage_at_service ||
+      null,
 
     service_center:
+      raw.serviceCenter ||
+      raw.service_center ||
+      'Corridor Workshop',
+    serviceCenter:
       raw.serviceCenter ||
       raw.service_center ||
       'Corridor Workshop',
@@ -2079,8 +2121,19 @@ export const normalizeFuel = (
     return null;
   }
 
+  const resolvedFuelLevel =
+    typeof raw.fuelLevel === 'number'
+      ? raw.fuelLevel
+      : (typeof raw.fuel_level === 'number' ? raw.fuel_level : 0);
+
   return {
     id: String(
+      raw.fuelRecordId ||
+      raw.id ||
+      raw._id ||
+      ''
+    ),
+    fuelRecordId: String(
       raw.fuelRecordId ||
       raw.id ||
       raw._id ||
@@ -2090,18 +2143,27 @@ export const normalizeFuel = (
     vehicle_id:
       raw.vehicleId ||
       raw.vehicle_id,
+    vehicleId:
+      raw.vehicleId ||
+      raw.vehicle_id,
 
     fuel_type:
       raw.fuelType ||
       raw.fuel_type ||
       'Diesel',
+    fuelType:
+      raw.fuelType ||
+      raw.fuel_type ||
+      'Diesel',
 
-    fuel_level:
-      typeof raw.fuelLevel === 'number'
-        ? raw.fuelLevel
-        : raw.fuel_level || 0,
+    fuel_level: resolvedFuelLevel,
+    fuelLevel: resolvedFuelLevel,
 
     fuel_added_liters:
+      raw.fuelAddedLiters ||
+      raw.fuel_added_liters ||
+      0,
+    fuelAddedLiters:
       raw.fuelAddedLiters ||
       raw.fuel_added_liters ||
       0,
@@ -2110,8 +2172,16 @@ export const normalizeFuel = (
       raw.fuelConsumedLiters ||
       raw.fuel_consumed_liters ||
       0,
+    fuelConsumedLiters:
+      raw.fuelConsumedLiters ||
+      raw.fuel_consumed_liters ||
+      0,
 
     fuel_efficiency:
+      raw.fuelEfficiencyKmPerLiter ||
+      raw.fuel_efficiency ||
+      0,
+    fuelEfficiencyKmPerLiter:
       raw.fuelEfficiencyKmPerLiter ||
       raw.fuel_efficiency ||
       0,
@@ -2120,8 +2190,16 @@ export const normalizeFuel = (
       raw.distanceKm ||
       raw.distance_km ||
       0,
+    distanceKm:
+      raw.distanceKm ||
+      raw.distance_km ||
+      0,
 
     fuel_cost:
+      raw.fuelCost ||
+      raw.fuel_cost ||
+      0,
+    fuelCost:
       raw.fuelCost ||
       raw.fuel_cost ||
       0,
@@ -2133,8 +2211,16 @@ export const normalizeFuel = (
       raw.anomalyType ||
       raw.anomaly_type ||
       null,
+    anomalyType:
+      raw.anomalyType ||
+      raw.anomaly_type ||
+      null,
 
     anomaly_severity:
+      raw.anomalySeverity ||
+      raw.anomaly_severity ||
+      null,
+    anomalySeverity:
       raw.anomalySeverity ||
       raw.anomaly_severity ||
       null,
@@ -2143,6 +2229,10 @@ export const normalizeFuel = (
       raw.location || '',
 
     recorded_at:
+      raw.recordedAt ||
+      raw.recorded_at ||
+      null,
+    recordedAt:
       raw.recordedAt ||
       raw.recorded_at ||
       null,
@@ -2185,16 +2275,32 @@ export const normalizeSafety = (
       raw._id ||
       ''
     ),
+    alertId: String(
+      raw.alertId ||
+      raw.id ||
+      raw._id ||
+      ''
+    ),
 
     vehicle_id:
+      raw.vehicleId ||
+      raw.vehicle_id,
+    vehicleId:
       raw.vehicleId ||
       raw.vehicle_id,
 
     driver_id:
       raw.driverId ||
       raw.driver_id,
+    driverId:
+      raw.driverId ||
+      raw.driver_id,
 
     alert_type:
+      raw.alertType ||
+      raw.alert_type ||
+      'General Alert',
+    alertType:
       raw.alertType ||
       raw.alert_type ||
       'General Alert',
@@ -2215,8 +2321,16 @@ export const normalizeSafety = (
       raw.speedKmph ||
       raw.speed_kmph ||
       0,
+    speedKmph:
+      raw.speedKmph ||
+      raw.speed_kmph ||
+      0,
 
     detected_at:
+      raw.detectedAt ||
+      raw.detected_at ||
+      null,
+    detectedAt:
       raw.detectedAt ||
       raw.detected_at ||
       null,
@@ -2225,8 +2339,16 @@ export const normalizeSafety = (
       raw.resolvedAt ||
       raw.resolved_at ||
       null,
+    resolvedAt:
+      raw.resolvedAt ||
+      raw.resolved_at ||
+      null,
 
     resolution_notes:
+      raw.resolutionNotes ||
+      raw.resolution_notes ||
+      '',
+    resolutionNotes:
       raw.resolutionNotes ||
       raw.resolution_notes ||
       '',

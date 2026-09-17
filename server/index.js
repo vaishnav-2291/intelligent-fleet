@@ -160,9 +160,9 @@ app.get('/api/auth/me', requireAuth, handleGetMe);
 // AUDIT LOGGING ENDPOINTS
 // ============================================================
 
-app.get('/api/audit-logs', requireAuth, requireRoles('ADMIN', 'FLEET_MANAGER'), (req, res) => {
-  const { limit, action, actor } = req.query;
-  const logs = getAuditLogs({ limit, action, actor });
+app.get('/api/audit-logs', requireAuth, requireRoles('ADMIN', 'FLEET_MANAGER'), async (req, res) => {
+  const { limit, action, actor, status } = req.query;
+  const logs = await getAuditLogs({ limit, action, actor, status });
   res.status(200).json({
     success: true,
     count: logs.length,
@@ -1234,11 +1234,11 @@ app.get('/api/safety-alerts/:id', (req, res) => {
 app.get('/api/analytics', async (req, res) => {
   try {
     const [vehRes, drvRes, tripRes, fuelRes, maintRes] = await Promise.all([
-      fetch(`${UPSTREAM_URL}/api/vehicles`).then(r => r.json()),
-      fetch(`${UPSTREAM_URL}/api/drivers`).then(r => r.json()),
-      fetch(`${UPSTREAM_URL}/api/trips`).then(r => r.json()),
-      fetch(`${UPSTREAM_URL}/api/fuel`).then(r => r.json()),
-      fetch(`${UPSTREAM_URL}/api/maintenance`).then(r => r.json())
+      fetch(`${UPSTREAM_URL}/api/vehicles`, { signal: AbortSignal.timeout(15000) }).then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(`${UPSTREAM_URL}/api/drivers`, { signal: AbortSignal.timeout(15000) }).then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(`${UPSTREAM_URL}/api/trips`, { signal: AbortSignal.timeout(15000) }).then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(`${UPSTREAM_URL}/api/fuel`, { signal: AbortSignal.timeout(15000) }).then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(`${UPSTREAM_URL}/api/maintenance`, { signal: AbortSignal.timeout(15000) }).then(r => r.json()).catch(() => ({ data: [] }))
     ]);
 
     const vehicles = Array.isArray(vehRes.data) ? vehRes.data : [];

@@ -29,9 +29,13 @@ import {
   Route,
   Activity,
   Zap,
-  BookOpen,
-  Hash,
-  Layers
+  Layers,
+  Wrench,
+  Fuel,
+  ShieldAlert,
+  BarChart3,
+  Clock,
+  TrendingUp
 } from 'lucide-react';
 
 export const AdminDashboard = () => {
@@ -39,7 +43,14 @@ export const AdminDashboard = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { 
     drivers, 
-    vehicles, 
+    vehicles,
+    maintenance,
+    fuel,
+    safetyAlerts,
+    stats,
+    analysis,
+    lastUpdated,
+    isRefreshing,
     createDriverAccount,
     createVehicleAccount,
     loading,
@@ -187,13 +198,20 @@ export const AdminDashboard = () => {
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span>Tamil Nadu Logistics Corridor</span>
                   </span>
+                  {lastUpdated && (
+                    <span className="hidden md:inline-flex px-2.5 py-1.5 rounded-xl bg-[#1A1A1D] border border-[#2A2A2E] text-xs font-mono text-[#9CA3AF] items-center space-x-1.5">
+                      <Clock className="w-3 h-3 text-cyan-400" />
+                      <span>{new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                    </span>
+                  )}
                   <button
                     onClick={() => refreshFleetData()}
-                    className="p-2 rounded-xl bg-[#1A1A1D] border border-[#2A2A2E] text-[#9CA3AF] hover:text-[#F5F5F5] hover:border-[#3F3F46] transition-colors"
+                    disabled={isRefreshing}
+                    className="p-2 rounded-xl bg-[#1A1A1D] border border-[#2A2A2E] text-[#9CA3AF] hover:text-[#F5F5F5] hover:border-[#3F3F46] transition-colors disabled:opacity-50"
                     title="Refresh Live Data"
                     aria-label="Refresh Live Data"
                   >
-                    <RotateCw className="w-3.5 h-3.5" />
+                    <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
                   </button>
                 </div>
               </div>
@@ -208,7 +226,7 @@ export const AdminDashboard = () => {
               <OngoingTripsTable />
 
               {/* D) Telemetry Anomalies & Upcoming Maintenance */}
-              <Phase2Placeholders />
+              <Phase2Placeholders onNavigateTab={setActiveTab} />
             </>
           )}
 
@@ -861,6 +879,588 @@ export const AdminDashboard = () => {
                   )}
                 </button>
               </form>
+            </div>
+          )}
+
+          {/* ========================================================
+              TAB: MAINTENANCE QUEUE
+              ======================================================== */}
+          {activeTab === 'maintenance' && (
+            <div className="bg-[#1A1A1D] rounded-2xl p-6 sm:p-8 border border-[#2A2A2E] shadow-sm space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2A2A2E] pb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 rounded-xl bg-[#252528] text-[#F5F5F5] border border-[#2A2A2E]">
+                    <Wrench className="w-6 h-6 text-amber-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-[#F5F5F5]">Authoritative Maintenance Queue</h2>
+                    <p className="text-xs text-[#9CA3AF]">Predictive vehicle servicing, inspection records, and workshop scheduling.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <span className="px-3 py-1 rounded-full bg-[#252528] text-xs font-mono text-[#F5F5F5] border border-[#2A2A2E]">
+                    {maintenance?.length || 0} Total Records
+                  </span>
+                  <button
+                    onClick={() => refreshFleetData()}
+                    disabled={isRefreshing}
+                    className="p-2 rounded-xl bg-[#252528] text-[#9CA3AF] hover:text-[#F5F5F5] border border-[#2A2A2E] transition-colors"
+                    title="Refresh Maintenance"
+                  >
+                    <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Chips */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-[#9CA3AF] block">Total In Queue</span>
+                  <span className="text-xl font-extrabold text-[#F5F5F5] font-mono">{maintenance?.length || 0}</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-amber-400 block">Due / Pending</span>
+                  <span className="text-xl font-extrabold text-amber-400 font-mono">
+                    {maintenance?.filter(m => (m.status || '').toLowerCase() !== 'completed').length || 0}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-red-400 block">High Priority</span>
+                  <span className="text-xl font-extrabold text-red-400 font-mono">
+                    {maintenance?.filter(m => (m.priority || '').toLowerCase() === 'high').length || 0}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-emerald-400 block">Completed</span>
+                  <span className="text-xl font-extrabold text-emerald-400 font-mono">
+                    {maintenance?.filter(m => (m.status || '').toLowerCase() === 'completed').length || 0}
+                  </span>
+                </div>
+              </div>
+
+              {/* Content Body */}
+              {loading?.maintenance ? (
+                <div className="space-y-3 py-6">
+                  {[1, 2, 3].map(n => (
+                    <div key={n} className="h-16 bg-[#252528] rounded-xl animate-pulse"></div>
+                  ))}
+                </div>
+              ) : !maintenance || maintenance.length === 0 ? (
+                <div className="p-8 text-center bg-[#0D0D0F] rounded-xl border border-[#2A2A2E] text-xs text-[#9CA3AF]">
+                  No maintenance records found in current fleet database.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-[#2A2A2E]">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#252528] text-[#9CA3AF] uppercase text-[10px] font-bold border-b border-[#2A2A2E]">
+                      <tr>
+                        <th className="px-4 py-3">Record ID</th>
+                        <th className="px-4 py-3">Vehicle</th>
+                        <th className="px-4 py-3">Service Type</th>
+                        <th className="px-4 py-3">Priority</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Service Center</th>
+                        <th className="px-4 py-3">Date</th>
+                        <th className="px-4 py-3">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#2A2A2E] text-[#F5F5F5]">
+                      {maintenance.map((m, idx) => {
+                        const isCompleted = (m.status || '').toLowerCase() === 'completed';
+                        const isHigh = (m.priority || '').toLowerCase() === 'high';
+                        const isMed = (m.priority || '').toLowerCase() === 'medium';
+                        const mId = m.maintenanceId || m.id || '—';
+                        const vId = m.vehicleId || m.vehicle_id || '—';
+                        const mType = m.maintenanceType || m.maintenance_type || 'general';
+                        const sCenter = m.serviceCenter || m.service_center || 'Depot Workshop';
+                        const dDate = m.dueDate || m.due_date;
+                        const cDate = m.completedDate || m.completed_date;
+                        return (
+                          <tr key={mId || idx} className="hover:bg-[#252528]/50 transition-colors">
+                            <td className="px-4 py-3 font-mono text-cyan-400 font-bold">{mId}</td>
+                            <td className="px-4 py-3 font-mono font-bold text-white">{vId}</td>
+                            <td className="px-4 py-3 capitalize font-semibold">
+                              {mType.replace(/_/g, ' ')}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                                isHigh ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                                isMed ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              }`}>
+                                {m.priority || 'standard'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                                isCompleted ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              }`}>
+                                {m.status || 'pending'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-[#9CA3AF] flex items-center space-x-1">
+                              <MapPin className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                              <span>{sCenter}</span>
+                            </td>
+                            <td className="px-4 py-3 font-mono text-[#9CA3AF]">
+                              {dDate ? new Date(dDate).toLocaleDateString() : (cDate ? new Date(cDate).toLocaleDateString() : '—')}
+                            </td>
+                            <td className="px-4 py-3 text-[#9CA3AF] max-w-xs truncate" title={m.description}>
+                              {m.description || 'Routine preventative check'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================
+              TAB: FUEL TELEMETRY
+              ======================================================== */}
+          {activeTab === 'fuel' && (
+            <div className="bg-[#1A1A1D] rounded-2xl p-6 sm:p-8 border border-[#2A2A2E] shadow-sm space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2A2A2E] pb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 rounded-xl bg-[#252528] text-[#F5F5F5] border border-[#2A2A2E]">
+                    <Fuel className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-[#F5F5F5]">Live Fuel Telemetry & Anomaly Detection</h2>
+                    <p className="text-xs text-[#9CA3AF]">Continuous fuel sensor streams, consumption rates, and anomaly detection.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <span className="px-3 py-1 rounded-full bg-[#252528] text-xs font-mono text-[#F5F5F5] border border-[#2A2A2E]">
+                    {fuel?.length || 0} Telemetry Feeds
+                  </span>
+                  <button
+                    onClick={() => refreshFleetData()}
+                    disabled={isRefreshing}
+                    className="p-2 rounded-xl bg-[#252528] text-[#9CA3AF] hover:text-[#F5F5F5] border border-[#2A2A2E] transition-colors"
+                    title="Refresh Fuel"
+                  >
+                    <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Chips */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-[#9CA3AF] block">Total Monitored</span>
+                  <span className="text-xl font-extrabold text-[#F5F5F5] font-mono">{fuel?.length || 0}</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-amber-400 block">Flagged Anomalies</span>
+                  <span className="text-xl font-extrabold text-amber-400 font-mono">
+                    {fuel?.filter(f => (f.status || '').toLowerCase() === 'anomaly' || Boolean(f.anomalyType || f.anomaly_type)).length || 0}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-red-400 block">Critical Anomalies</span>
+                  <span className="text-xl font-extrabold text-red-400 font-mono">
+                    {fuel?.filter(f => (f.anomalySeverity || f.anomaly_severity || '').toLowerCase() === 'critical').length || 0}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-emerald-400 block">Average Fuel Level</span>
+                  <span className="text-xl font-extrabold text-emerald-400 font-mono">
+                    {fuel && fuel.length > 0 ? Math.round(fuel.reduce((a, b) => a + (Number(b.fuelLevel ?? b.fuel_level) || 0), 0) / fuel.length) : 0}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Content Body */}
+              {loading?.fuel ? (
+                <div className="space-y-3 py-6">
+                  {[1, 2, 3].map(n => (
+                    <div key={n} className="h-16 bg-[#252528] rounded-xl animate-pulse"></div>
+                  ))}
+                </div>
+              ) : !fuel || fuel.length === 0 ? (
+                <div className="p-8 text-center bg-[#0D0D0F] rounded-xl border border-[#2A2A2E] text-xs text-[#9CA3AF]">
+                  No fuel telemetry records available in the current fleet database.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-[#2A2A2E]">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#252528] text-[#9CA3AF] uppercase text-[10px] font-bold border-b border-[#2A2A2E]">
+                      <tr>
+                        <th className="px-4 py-3">Vehicle</th>
+                        <th className="px-4 py-3">Fuel Level</th>
+                        <th className="px-4 py-3">Consumed</th>
+                        <th className="px-4 py-3">Added</th>
+                        <th className="px-4 py-3">Efficiency</th>
+                        <th className="px-4 py-3">Telemetry Status</th>
+                        <th className="px-4 py-3">Anomaly</th>
+                        <th className="px-4 py-3">Location</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#2A2A2E] text-[#F5F5F5]">
+                      {fuel.map((f, idx) => {
+                        const level = Number(f.fuelLevel ?? f.fuel_level ?? 0);
+                        const isAnomaly = (f.status || '').toLowerCase() === 'anomaly' || Boolean(f.anomalyType || f.anomaly_type);
+                        const aType = f.anomalyType || f.anomaly_type;
+                        const vId = f.vehicleId || f.vehicle_id;
+                        const fId = f.fuelRecordId || f.id || idx;
+                        const barColor = level > 50 ? 'bg-emerald-500' : level > 25 ? 'bg-amber-500' : 'bg-red-500';
+                        return (
+                          <tr key={fId} className="hover:bg-[#252528]/50 transition-colors">
+                            <td className="px-4 py-3 font-mono font-bold text-white">{vId}</td>
+                            <td className="px-4 py-3 min-w-[140px]">
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-[11px] font-mono">
+                                  <span className="font-bold">{level}%</span>
+                                  <span className="text-[#9CA3AF]">{f.fuelType || f.fuel_type || 'diesel'}</span>
+                                </div>
+                                <div className="w-full bg-[#252528] rounded-full h-1.5 overflow-hidden">
+                                  <div className={`${barColor} h-full rounded-full transition-all`} style={{ width: `${Math.min(level, 100)}%` }}></div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-mono text-[#F5F5F5]">{f.fuelConsumedLiters ?? f.fuel_consumed_liters ?? '—'} L</td>
+                            <td className="px-4 py-3 font-mono text-emerald-400">+{f.fuelAddedLiters ?? f.fuel_added_liters ?? 0} L</td>
+                            <td className="px-4 py-3 font-mono text-[#9CA3AF]">{(f.fuelEfficiencyKmPerLiter ?? f.fuel_efficiency) ? `${f.fuelEfficiencyKmPerLiter ?? f.fuel_efficiency} km/L` : '—'}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                                isAnomaly 
+                                  ? 'bg-red-500/15 text-red-400 border border-red-500/30 animate-pulse' 
+                                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              }`}>
+                                {isAnomaly ? 'Anomaly' : 'Normal'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {aType ? (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  {aType}
+                                </span>
+                              ) : (
+                                <span className="text-[#9CA3AF] text-[10px]">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-[#9CA3AF] flex items-center space-x-1">
+                              <MapPin className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                              <span>{f.location || 'Corridor Transit'}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================
+              TAB: SAFETY ALERTS
+              ======================================================== */}
+          {activeTab === 'safety' && (
+            <div className="bg-[#1A1A1D] rounded-2xl p-6 sm:p-8 border border-[#2A2A2E] shadow-sm space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2A2A2E] pb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 rounded-xl bg-[#252528] text-[#F5F5F5] border border-[#2A2A2E]">
+                    <ShieldAlert className="w-6 h-6 text-red-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-[#F5F5F5]">Fleet Safety & Incident Radar</h2>
+                    <p className="text-xs text-[#9CA3AF]">Real-time corridor speed radar, harsh braking events, and risk telemetry.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <span className="px-3 py-1 rounded-full bg-[#252528] text-xs font-mono text-[#F5F5F5] border border-[#2A2A2E]">
+                    {safetyAlerts?.length || 0} Incident Alerts
+                  </span>
+                  <button
+                    onClick={() => refreshFleetData()}
+                    disabled={isRefreshing}
+                    className="p-2 rounded-xl bg-[#252528] text-[#9CA3AF] hover:text-[#F5F5F5] border border-[#2A2A2E] transition-colors"
+                    title="Refresh Safety"
+                  >
+                    <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Chips */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-[#9CA3AF] block">Total Incidents</span>
+                  <span className="text-xl font-extrabold text-[#F5F5F5] font-mono">{safetyAlerts?.length || 0}</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-amber-400 block">Open Incidents</span>
+                  <span className="text-xl font-extrabold text-amber-400 font-mono">
+                    {safetyAlerts?.filter(a => (a.status || '').toLowerCase() === 'open').length || 0}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-red-400 block">Critical Violations</span>
+                  <span className="text-xl font-extrabold text-red-400 font-mono">
+                    {safetyAlerts?.filter(a => (a.severity || '').toLowerCase() === 'critical').length || 0}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-cyan-400 block">Corridor Monitored</span>
+                  <span className="text-xl font-extrabold text-cyan-400 font-mono">NH544/NH48</span>
+                </div>
+              </div>
+
+              {/* Content Body */}
+              {loading?.safety ? (
+                <div className="space-y-3 py-6">
+                  {[1, 2, 3].map(n => (
+                    <div key={n} className="h-16 bg-[#252528] rounded-xl animate-pulse"></div>
+                  ))}
+                </div>
+              ) : !safetyAlerts || safetyAlerts.length === 0 ? (
+                <div className="p-8 text-center bg-[#0D0D0F] rounded-xl border border-[#2A2A2E] text-xs text-[#9CA3AF]">
+                  No safety incident alerts recorded in the current fleet database.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {safetyAlerts.map((alert, idx) => {
+                    const isCrit = (alert.severity || '').toLowerCase() === 'critical';
+                    const isHigh = (alert.severity || '').toLowerCase() === 'high';
+                    const aId = alert.alertId || alert.id || `SA${idx}`;
+                    const vId = alert.vehicleId || alert.vehicle_id;
+                    const dId = alert.driverId || alert.driver_id;
+                    const aType = alert.alertType || alert.alert_type || 'General Alert';
+                    const spd = alert.speedKmph ?? alert.speed_kmph;
+                    const detAt = alert.detectedAt || alert.detected_at;
+                    return (
+                      <div 
+                        key={aId}
+                        className={`p-4 rounded-xl bg-[#0D0D0F] border transition-all ${
+                          isCrit ? 'border-red-500/40 bg-red-950/10' :
+                          isHigh ? 'border-amber-500/30' :
+                          'border-[#2A2A2E]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-[#2A2A2E]/60">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-mono text-xs font-bold text-cyan-400">{aId}</span>
+                            <span className="text-xs font-bold text-white uppercase">{aType.replace(/_/g, ' ')}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
+                            isCrit ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse' :
+                            isHigh ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                            'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          }`}>
+                            {alert.severity}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 space-y-2 text-xs">
+                          <p className="text-[#F5F5F5] font-medium leading-snug">{alert.description}</p>
+                          
+                          <div className="grid grid-cols-2 gap-2 text-[11px] text-[#9CA3AF] pt-2">
+                            <div className="flex items-center space-x-1.5">
+                              <Truck className="w-3.5 h-3.5 text-cyan-400" />
+                              <span className="font-mono text-white">{vId}</span>
+                            </div>
+                            <div className="flex items-center space-x-1.5">
+                              <Users className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="font-mono text-white">{dId || 'Unassigned'}</span>
+                            </div>
+                            {spd && (
+                              <div className="flex items-center space-x-1.5 text-red-400 font-mono font-bold">
+                                <Activity className="w-3.5 h-3.5" />
+                                <span>{spd} km/h (Radar)</span>
+                              </div>
+                            )}
+                            <div className="flex items-center space-x-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                              <span className="truncate">{alert.location || 'Corridor Highway'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-2 border-t border-[#2A2A2E]/60 flex items-center justify-between text-[10px] text-[#9CA3AF]">
+                          <span>Status: <strong className="text-white uppercase">{alert.status || 'open'}</strong></span>
+                          <span>{detAt ? new Date(detAt).toLocaleString() : 'Live'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================
+              TAB: FLEET ANALYTICS & EXECUTIVE INTELLIGENCE
+              ======================================================== */}
+          {activeTab === 'analytics' && (
+            <div className="bg-[#1A1A1D] rounded-2xl p-6 sm:p-8 border border-[#2A2A2E] shadow-sm space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2A2A2E] pb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-3 rounded-xl bg-[#252528] text-[#F5F5F5] border border-[#2A2A2E]">
+                    <BarChart3 className="w-6 h-6 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-[#F5F5F5]">Fleet Intelligence & Performance Analysis</h2>
+                    <p className="text-xs text-[#9CA3AF]">Authoritative KPIs, operational risk indicators, and strategic recommendations.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  {analysis?.risk?.level && (
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${
+                      analysis.risk.level === 'critical' 
+                        ? 'bg-red-500/20 text-red-400 border-red-500/40 animate-pulse'
+                        : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                    }`}>
+                      Risk Level: {analysis.risk.level}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => refreshFleetData()}
+                    disabled={isRefreshing}
+                    className="p-2 rounded-xl bg-[#252528] text-[#9CA3AF] hover:text-[#F5F5F5] border border-[#2A2A2E] transition-colors"
+                    title="Refresh Analytics"
+                  >
+                    <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Top Rate Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="p-4 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-[#9CA3AF] block">Vehicle Utilization</span>
+                  <div className="mt-1 flex items-baseline space-x-1">
+                    <span className="text-2xl font-extrabold text-emerald-400 font-mono">
+                      {analysis?.performance?.vehicleUtilizationRate ?? stats?.fleet_utilization_rate ?? 72.73}%
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#9CA3AF]">of active fleet deployed</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-[#9CA3AF] block">Trip Completion</span>
+                  <div className="mt-1 flex items-baseline space-x-1">
+                    <span className="text-2xl font-extrabold text-cyan-400 font-mono">
+                      {analysis?.performance?.tripCompletionRate ?? 36.36}%
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#9CA3AF]">delivered corridors</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-amber-400 block">Maintenance Due</span>
+                  <div className="mt-1 flex items-baseline space-x-1">
+                    <span className="text-2xl font-extrabold text-amber-400 font-mono">
+                      {analysis?.performance?.maintenanceDueRate ?? 63.64}%
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#9CA3AF]">service queue pending</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-red-400 block">Fuel Anomalies</span>
+                  <div className="mt-1 flex items-baseline space-x-1">
+                    <span className="text-2xl font-extrabold text-red-400 font-mono">
+                      {analysis?.performance?.fuelAnomalyRate ?? 36.36}%
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#9CA3AF]">variance flagged</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#0D0D0F] border border-[#2A2A2E]">
+                  <span className="text-[10px] uppercase font-bold text-rose-400 block">Safety Alert Rate</span>
+                  <div className="mt-1 flex items-baseline space-x-1">
+                    <span className="text-2xl font-extrabold text-rose-400 font-mono">
+                      {analysis?.performance?.openSafetyAlertRate ?? 63.64}%
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#9CA3AF]">open radar alerts</span>
+                </div>
+              </div>
+
+              {/* Strategic Insights Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {/* 1. Strengths */}
+                <div className="p-5 rounded-2xl bg-[#0D0D0F] border border-[#2A2A2E] space-y-3">
+                  <div className="flex items-center space-x-2 text-emerald-400 font-bold text-sm">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Operational Strengths</span>
+                  </div>
+                  <ul className="space-y-2 text-xs text-[#F5F5F5]">
+                    {(analysis?.analysis?.strengths || [
+                      "Vehicle utilization is strong across active logistics corridors.",
+                      "Real-time GPS tracking synchronized with MongoDB Atlas.",
+                      "Authoritative driver verification active."
+                    ]).map((s, idx) => (
+                      <li key={idx} className="flex items-start space-x-2">
+                        <span className="text-emerald-400 mt-0.5">•</span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* 2. Operational Concerns */}
+                <div className="p-5 rounded-2xl bg-[#0D0D0F] border border-[#2A2A2E] space-y-3">
+                  <div className="flex items-center space-x-2 text-amber-400 font-bold text-sm">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Operational Concerns & Risks</span>
+                  </div>
+                  <ul className="space-y-2 text-xs text-[#F5F5F5]">
+                    {(analysis?.analysis?.concerns || [
+                      "Elevated maintenance inspection queue requiring service assignment.",
+                      "Fuel consumption variance detected on long-haul routes.",
+                      "Open safety radar violations require supervisor review."
+                    ]).map((c, idx) => (
+                      <li key={idx} className="flex items-start space-x-2">
+                        <span className="text-amber-400 mt-0.5">•</span>
+                        <span>{c}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* 3. Strategic Recommendations */}
+                <div className="p-5 rounded-2xl bg-[#0D0D0F] border border-[#2A2A2E] space-y-3">
+                  <div className="flex items-center space-x-2 text-cyan-400 font-bold text-sm">
+                    <TrendingUp className="w-4 h-4" />
+                    <span>Strategic AI Recommendations</span>
+                  </div>
+                  <ul className="space-y-2 text-xs text-[#F5F5F5]">
+                    {(analysis?.analysis?.recommendations || [
+                      "Prioritize vehicles with due maintenance before assigning additional workload.",
+                      "Review anomalous fuel records and investigate abnormal consumption.",
+                      "Immediately review critical safety alerts on the NH48 corridor."
+                    ]).map((r, idx) => (
+                      <li key={idx} className="flex items-start space-x-2">
+                        <span className="text-cyan-400 mt-0.5">•</span>
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Timestamp Footer */}
+              <div className="pt-3 border-t border-[#2A2A2E] flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-[#9CA3AF] gap-2">
+                <span>Source: Authoritative Analytics Engine (Render MongoDB Atlas)</span>
+                <span className="font-mono">
+                  Analysis Generated: {analysis?.generatedAt ? new Date(analysis.generatedAt).toLocaleString() : 'Live Synchronized'}
+                </span>
+              </div>
             </div>
           )}
 

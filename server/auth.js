@@ -9,7 +9,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { logAuditEvent } from './auditLogger.js';
 import { User } from './models/User.js';
-import { isDbConnected, SEEDED_SYSTEM_USERS } from './db.js';
+import { isDbConnected, connectDb, SEEDED_SYSTEM_USERS } from './db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fleet-super-secure-jwt-secret-key-2026';
 const TOKEN_EXPIRY = '24h';
@@ -231,6 +231,9 @@ export async function handleRegister(req, res) {
     : null;
 
   // Require MongoDB for registration — do not allow silent in-memory persistence
+  if (!isDbConnected()) {
+    await connectDb();
+  }
   if (!isDbConnected()) {
     return res.status(503).json({
       success: false,

@@ -95,7 +95,15 @@ export async function initUserDatabase() {
 }
 
 export async function connectDb() {
-  if (isDbConnected() || isConnecting) {
+  if (isDbConnected()) {
+    return true;
+  }
+  if (isConnecting) {
+    let waited = 0;
+    while (isConnecting && waited < 50) {
+      await new Promise(r => setTimeout(r, 100));
+      waited++;
+    }
     return isDbConnected();
   }
 

@@ -7,8 +7,8 @@ export const AvailableDriversPanel = () => {
   const { drivers } = useFleet();
   const [selectedDriverForModal, setSelectedDriverForModal] = useState(null);
 
-  const availableDrivers = drivers.filter(
-    (d) => d.status.toLowerCase() === 'ready'
+  const availableDrivers = (drivers || []).filter(
+    (d) => String(d?.status || '').toLowerCase() === 'ready'
   );
 
   return (
