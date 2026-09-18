@@ -543,7 +543,7 @@ export const DriverDashboard = () => {
                     </div>
                   </div>
 
-                  <div className="relative w-full h-96 sm:h-[420px] bg-[#0D0D0F]">
+                  <div className="relative w-full h-[540px] sm:h-[620px] lg:h-[680px] bg-[#0D0D0F]">
                     <InteractiveFleetMap
                       origin={assignedRoute.source}
                       destination={assignedRoute.destination}
@@ -555,6 +555,7 @@ export const DriverDashboard = () => {
                       showDrivers={true}
                       vehicles={assignedVehicle ? [assignedVehicle] : []}
                       showVehicles={Boolean(assignedVehicle)}
+                      loading={isLoadingGeometry}
                       height="100%"
                     />
                   </div>

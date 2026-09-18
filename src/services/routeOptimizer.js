@@ -5,6 +5,7 @@ import {
   getEstimatedDuration,
   DURATION_MATRIX 
 } from '../data/mockData';
+import cachedCorridors from './cachedCorridors.js';
 
 /**
  * Predefined popular corridor routes for rapid logistics selection
@@ -97,6 +98,13 @@ export const resolveStopCoords = (stop) => {
 
 const matrixCache = new Map();
 const routeCache = new Map();
+
+// Pre-seed routeCache with authoritative high-density OSRM road geometry for primary corridors
+if (cachedCorridors && typeof cachedCorridors === 'object') {
+  for (const [key, val] of Object.entries(cachedCorridors)) {
+    routeCache.set(key, val);
+  }
+}
 
 /**
  * Fetches real road-distance and travel-duration matrix from OSRM Table API.
@@ -386,7 +394,7 @@ export const getRoadFollowingRoute = async (origin, destination, waypoints = [],
     const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsParam}?overview=full&geometries=geojson&steps=false`;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), options?.timeoutMs || 6000);
+    const timeoutId = setTimeout(() => controller.abort(), options?.timeoutMs || 15000);
 
     if (options?.signal) {
       if (options.signal.aborted) {

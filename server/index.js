@@ -405,7 +405,7 @@ export function invalidateUpstreamCache(pattern = null) {
   }
 }
 
-async function fetchFromUpstream(endpoint, req) {
+async function fetchFromUpstream(endpoint, req, retries = 1) {
   const isGet = req.method === 'GET';
   const now = Date.now();
   if (isGet && upstreamCache.has(endpoint)) {
@@ -424,7 +424,7 @@ async function fetchFromUpstream(endpoint, req) {
         ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {})
       },
       ...(req.method !== 'GET' && req.body ? { body: JSON.stringify(req.body) } : {}),
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(25000)
     });
 
     const data = await upstreamRes.json();
@@ -433,6 +433,10 @@ async function fetchFromUpstream(endpoint, req) {
     }
     return { status: upstreamRes.status, data };
   } catch (err) {
+    if (retries > 0 && isGet) {
+      // Retry once to handle Render wake-up latency
+      return fetchFromUpstream(endpoint, req, retries - 1);
+    }
     if (isGet && upstreamCache.has(endpoint)) {
       return { status: 200, data: upstreamCache.get(endpoint).data };
     }
@@ -1357,6 +1361,10 @@ app.listen(PORT, async () => {
   connectDb().catch(err => {
     console.warn('[Fleet Server] Auth DB connection failed, running with in-memory auth fallback:', err.message);
   });
+  // Pre-warm upstream backend to avoid cold-start latency
+  fetch(`${UPSTREAM_URL}/api/vehicles`, { signal: AbortSignal.timeout(10000) })
+    .then(() => console.log('[Fleet Server] Upstream backend pre-warmed successfully.'))
+    .catch(() => { /* non-fatal background warm */ });
 });
 
 export default app;

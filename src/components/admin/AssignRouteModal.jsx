@@ -288,7 +288,7 @@ export const AssignRouteModal = ({ driver, isOpen, onClose }) => {
               <span className="font-bold text-[#F5F5F5] uppercase tracking-wider">Route Preview Map</span>
               <span className="text-[#9CA3AF] font-mono">Live Hub Coordinates</span>
             </div>
-            <div className="h-48 w-full">
+            <div className="h-80 sm:h-96 w-full">
               <InteractiveFleetMap
                 origin={source}
                 destination={destination}

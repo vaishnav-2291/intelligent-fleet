@@ -7,7 +7,6 @@ import {
   solveOptimalStopSequence 
 } from '../../services/routeOptimizer';
 import { InteractiveFleetMap } from '../common/InteractiveFleetMap';
-import { LocationUpdatePanel } from './LocationUpdatePanel';
 import { 
   Navigation, 
   MapPin, 
@@ -1031,7 +1030,7 @@ export const DispatchRoutingView = () => {
             </div>
 
             {/* Primary Interactive Map Container */}
-            <div className="relative w-full h-[540px] rounded-xl overflow-hidden border border-[#2A2A2E] bg-[#0D0D0F]">
+            <div className="relative w-full h-[740px] lg:h-[820px] xl:h-[860px] rounded-xl overflow-hidden border border-[#2A2A2E] bg-[#0D0D0F] shadow-2xl transition-all">
               <InteractiveFleetMap
                 origin={origin}
                 destination={destination}
@@ -1043,6 +1042,9 @@ export const DispatchRoutingView = () => {
                 vehicles={vehicles}
                 drivers={drivers}
                 highlightedEntity={highlightMapEntity}
+                loading={routeData.loading}
+                error={routeData.error}
+                onRetry={() => computeRoute(origin, destination, waypoints)}
                 onSelectVehicle={(veh) => {
                   setSelectedVehicleId(veh.vehicleId || veh.id);
                   showNotification(`Selected ${veh.vehicleId || veh.id} (${veh.fuel_level ?? veh.fuelLevel}% Fuel, ${veh.status})`, 'info');
@@ -1086,11 +1088,6 @@ export const DispatchRoutingView = () => {
                   </span>
                 </div>
               </div>
-            </div>
-
-            {/* Admin Live Telemetry & Location Dispatch Panel */}
-            <div className="pt-2">
-              <LocationUpdatePanel />
             </div>
 
           </div>
