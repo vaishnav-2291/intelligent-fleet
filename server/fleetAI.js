@@ -302,7 +302,7 @@ export async function runRouteOptimizationTool({ origin, destination, waypoints 
  * Safely normalizes origin, destination, and waypoints
  */
 export function parseRouteQuery(queryText) {
-  const text = String(queryText || '').trim();
+  const text = String(queryText || '').replace(/[.?!;:]+$/, '').trim();
   let origin = 'Coimbatore';
   let destination = 'Chennai';
   let waypoints = [];

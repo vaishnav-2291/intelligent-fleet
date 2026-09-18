@@ -179,7 +179,9 @@ export const DispatchRoutingView = () => {
     trips, 
     assignRoute, 
     showNotification,
-    highlightMapEntity
+    highlightMapEntity,
+    activeRoute,
+    setActiveRoute
   } = useFleet();
 
   // Route Planning State
@@ -375,6 +377,63 @@ export const DispatchRoutingView = () => {
   useEffect(() => {
     if (!hasInitializedDriverRef.current && drivers && drivers.length > 0) {
       hasInitializedDriverRef.current = true;
+
+      // If an active AI route exists or route highlight is targeted, preserve it!
+      const targetRoute = (highlightMapEntity && highlightMapEntity.type === 'route') ? highlightMapEntity : activeRoute;
+      if (targetRoute && targetRoute.origin && targetRoute.destination) {
+        const orig = targetRoute.origin;
+        const dest = targetRoute.destination;
+        const stops = Array.isArray(targetRoute.waypoints)
+          ? targetRoute.waypoints
+          : (Array.isArray(targetRoute.optimizedStops) && targetRoute.optimizedStops.length > 2
+             ? targetRoute.optimizedStops.slice(1, -1)
+             : []);
+
+        setOrigin(orig);
+        setDestination(dest);
+        setWaypoints(stops);
+        setSelectedPreset('custom');
+        if (targetRoute.optimizedStops && targetRoute.optimizedStops.length > 0) {
+          setOptimizationNote(`AI Optimized Route: ${targetRoute.optimizedStops.join(' → ')}`);
+        }
+
+        // Pair first available driver without resetting route origin/dest:
+        const firstAvail = drivers.find((d) => {
+          const s = (d.status || '').toLowerCase();
+          return s === 'ready' || s === 'active' || s === 'offline';
+        }) || drivers[0];
+        if (firstAvail) {
+          const dId = String(firstAvail.id || firstAvail.driverId);
+          setSelectedDriverId(dId);
+          const pairedVehId = resolveVehicleForDriver(dId, null, drivers, vehicles);
+          if (pairedVehId) setSelectedVehicleId(pairedVehId);
+          setDriverRouteStatus({
+            loading: false,
+            hasRoute: true,
+            label: `AI Optimized Route: ${orig} → ${dest}`,
+            tripId: null,
+            status: 'AI Plan'
+          });
+        }
+
+        if (Array.isArray(targetRoute.routeGeometry) && targetRoute.routeGeometry.length > 1) {
+          setRouteData({
+            loading: false,
+            routeGeometry: targetRoute.routeGeometry,
+            distanceKm: targetRoute.distanceKm || 0,
+            duration: targetRoute.duration || '0m',
+            statusSource: targetRoute.statusSource || 'AI Highway Telemetry',
+            isRoadFollowing: true,
+            legs: targetRoute.legs || [],
+            pointCount: targetRoute.routeGeometry.length
+          });
+          setRouteStatusMessage(null);
+        } else {
+          computeRoute(orig, dest, stops);
+        }
+        return;
+      }
+
       const firstAvail = drivers.find((d) => {
         const s = (d.status || '').toLowerCase();
         return s === 'ready' || s === 'active' || s === 'offline';
@@ -383,12 +442,54 @@ export const DispatchRoutingView = () => {
       const dId = String(firstAvail.id || firstAvail.driverId);
       handleDriverChange(dId);
     }
-  }, [drivers, handleDriverChange]);
+  }, [drivers, handleDriverChange, highlightMapEntity, activeRoute, computeRoute, vehicles]);
 
   // Synchronize AI Chat or Roster Highlighted Entity with Live Map
   useEffect(() => {
     if (highlightMapEntity) {
-      if (highlightMapEntity.type === 'vehicle' || highlightMapEntity.vehicleId) {
+      if (highlightMapEntity.type === 'route') {
+        const orig = highlightMapEntity.origin;
+        const dest = highlightMapEntity.destination;
+        const stops = Array.isArray(highlightMapEntity.waypoints)
+          ? highlightMapEntity.waypoints
+          : (Array.isArray(highlightMapEntity.optimizedStops) && highlightMapEntity.optimizedStops.length > 2
+             ? highlightMapEntity.optimizedStops.slice(1, -1)
+             : []);
+
+        if (orig && dest) {
+          setOrigin(orig);
+          setDestination(dest);
+          setWaypoints(stops);
+          setSelectedPreset('custom');
+          if (highlightMapEntity.optimizedStops && highlightMapEntity.optimizedStops.length > 0) {
+            setOptimizationNote(`AI Optimized Route: ${highlightMapEntity.optimizedStops.join(' → ')}`);
+          } else {
+            setOptimizationNote(null);
+          }
+
+          setDriverRouteStatus((prev) => ({
+            ...prev,
+            hasRoute: true,
+            label: `AI Optimized Route: ${orig} → ${dest}`
+          }));
+
+          if (Array.isArray(highlightMapEntity.routeGeometry) && highlightMapEntity.routeGeometry.length > 1) {
+            setRouteData({
+              loading: false,
+              routeGeometry: highlightMapEntity.routeGeometry,
+              distanceKm: highlightMapEntity.distanceKm || 0,
+              duration: highlightMapEntity.duration || '0m',
+              statusSource: highlightMapEntity.statusSource || 'AI Highway Telemetry',
+              isRoadFollowing: true,
+              legs: highlightMapEntity.legs || [],
+              pointCount: highlightMapEntity.routeGeometry.length
+            });
+            setRouteStatusMessage(null);
+          } else {
+            computeRoute(orig, dest, stops);
+          }
+        }
+      } else if (highlightMapEntity.type === 'vehicle' || highlightMapEntity.vehicleId) {
         const vId = highlightMapEntity.id || highlightMapEntity.vehicleId;
         const matchingVeh = (vehicles || []).find((v) =>
           String(v.vehicleId || v.id).toUpperCase() === String(vId).toUpperCase()
@@ -404,7 +505,7 @@ export const DispatchRoutingView = () => {
         handleDriverChange(dId);
       }
     }
-  }, [highlightMapEntity, vehicles, destination, handleDriverChange]);
+  }, [highlightMapEntity, vehicles, destination, handleDriverChange, computeRoute]);
 
   // Handle Preset Selection
   const handlePresetSelect = (preset) => {

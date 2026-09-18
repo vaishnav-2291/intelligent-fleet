@@ -54,7 +54,7 @@ const getBrowserSessionId = () => {
 };
 
 export const FleetAIChatView = ({ onNavigateTab = null }) => {
-  const { setHighlightMapEntity } = useFleet();
+  const { setHighlightMapEntity, setActiveRoute } = useFleet();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -192,12 +192,58 @@ export const FleetAIChatView = ({ onNavigateTab = null }) => {
       const vehicleMatch = aiAnswer.match(/VH\d{3}/i);
       const driverMatch = aiAnswer.match(/DR\d{3}/i);
 
+      // Check for route optimization result in response payload
+      const rawRoutePayload = 
+        response?.data?.intent === 'ROUTE' || 
+        response?.data?.operation === 'OPTIMIZE_ROUTE' || 
+        response?.data?.data?.optimizedStops || 
+        response?.data?.optimizedStops ||
+        response?.intent === 'ROUTE'
+          ? (response?.data?.data || response?.data || {})
+          : null;
+
+      let routeInfo = null;
+      if (rawRoutePayload && (rawRoutePayload.origin || rawRoutePayload.optimizedStops)) {
+        const origin = rawRoutePayload.origin || (Array.isArray(rawRoutePayload.optimizedStops) ? rawRoutePayload.optimizedStops[0] : null);
+        const destination = rawRoutePayload.destination || (Array.isArray(rawRoutePayload.optimizedStops) ? rawRoutePayload.optimizedStops[rawRoutePayload.optimizedStops.length - 1] : null);
+        const waypoints = Array.isArray(rawRoutePayload.waypoints) && rawRoutePayload.waypoints.length > 0
+          ? rawRoutePayload.waypoints
+          : (Array.isArray(rawRoutePayload.optimizedStops) && rawRoutePayload.optimizedStops.length > 2
+             ? rawRoutePayload.optimizedStops.slice(1, -1)
+             : []);
+        const optimizedStops = Array.isArray(rawRoutePayload.optimizedStops)
+          ? rawRoutePayload.optimizedStops
+          : [origin, ...waypoints, destination].filter(Boolean);
+        const routeGeometry = rawRoutePayload.routeGeometry || null;
+
+        if (origin && destination) {
+          routeInfo = {
+            type: 'route',
+            origin,
+            destination,
+            waypoints,
+            optimizedStops,
+            routeGeometry,
+            distanceKm: rawRoutePayload.distanceKm,
+            duration: rawRoutePayload.duration,
+            statusSource: rawRoutePayload.statusSource,
+            timestamp: Date.now()
+          };
+
+          // Automatically synchronize with Dispatch & Routing map
+          if (setActiveRoute) setActiveRoute(routeInfo);
+          setHighlightMapEntity(routeInfo);
+          if (onNavigateTab) onNavigateTab('dispatch');
+        }
+      }
+
       const aiMessage = {
         id: `ai-msg-${messageIdCounterRef.current}`,
         sender: 'ai',
         text: aiAnswer,
         referencedVehicle: vehicleMatch ? vehicleMatch[0].toUpperCase() : null,
         referencedDriver: driverMatch ? driverMatch[0].toUpperCase() : null,
+        referencedRoute: routeInfo,
         timestamp: new Date().toLocaleTimeString([], {
           hour: '2-digit',
           minute: '2-digit'
@@ -430,8 +476,35 @@ export const FleetAIChatView = ({ onNavigateTab = null }) => {
                           {msg.text}
                         </p>
 
-                        {(msg.referencedVehicle || msg.referencedDriver) && (
+                        {(msg.referencedRoute || msg.referencedVehicle || msg.referencedDriver) && (
                           <div className="mt-2.5 pt-2 border-t border-[#2A2A2E]/60 flex flex-wrap gap-2">
+                            {msg.referencedRoute && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const payload = {
+                                    type: 'route',
+                                    origin: msg.referencedRoute.origin,
+                                    destination: msg.referencedRoute.destination,
+                                    waypoints: msg.referencedRoute.waypoints,
+                                    optimizedStops: msg.referencedRoute.optimizedStops,
+                                    routeGeometry: msg.referencedRoute.routeGeometry,
+                                    distanceKm: msg.referencedRoute.distanceKm,
+                                    duration: msg.referencedRoute.duration,
+                                    statusSource: msg.referencedRoute.statusSource,
+                                    timestamp: Date.now()
+                                  };
+                                  if (setActiveRoute) setActiveRoute(payload);
+                                  setHighlightMapEntity(payload);
+                                  if (onNavigateTab) onNavigateTab('dispatch');
+                                }}
+                                data-testid="chat-view-focus-route"
+                                className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-700/50 text-[10px] font-bold transition-all shadow cursor-pointer"
+                              >
+                                <Navigation className="w-3 h-3 text-cyan-400" />
+                                <span>View / Focus Optimized Route on Map</span>
+                              </button>
+                            )}
                             {msg.referencedVehicle && (
                               <button
                                 type="button"

@@ -424,9 +424,10 @@ export const InteractiveFleetMap = ({
       boundsPoints.push(latLng);
     });
 
-    // Auto-fit route bounds with balanced padding on corridor station change
-    if (boundsPoints.length > 1 && !highlightedEntity) {
-      const boundsKey = boundsPoints.map(p => `${p[0].toFixed(3)},${p[1].toFixed(3)}`).join(';');
+    // Auto-fit route bounds with balanced padding on corridor station change or route highlight focus
+    const isRouteHighlight = highlightedEntity?.type === 'route';
+    if (boundsPoints.length > 1 && (!highlightedEntity || isRouteHighlight)) {
+      const boundsKey = boundsPoints.map(p => `${p[0].toFixed(3)},${p[1].toFixed(3)}`).join(';') + (isRouteHighlight ? `_route_${highlightedEntity.timestamp || ''}` : '');
       if (boundsKey !== lastFittedBoundsKeyRef.current) {
         lastFittedBoundsKeyRef.current = boundsKey;
         const bounds = L.latLngBounds(boundsPoints);
@@ -434,11 +435,11 @@ export const InteractiveFleetMap = ({
           paddingTopLeft: [70, 110],
           paddingBottomRight: [70, 70],
           maxZoom: 14,
-          animate: false,
+          animate: true,
         });
       }
-    } else if (boundsPoints.length === 1 && !highlightedEntity) {
-      map.setView(boundsPoints[0], 12, { animate: false });
+    } else if (boundsPoints.length === 1 && (!highlightedEntity || isRouteHighlight)) {
+      map.setView(boundsPoints[0], 12, { animate: true });
     }
   }, [
     origin,
@@ -447,6 +448,7 @@ export const InteractiveFleetMap = ({
     originLatLng,
     destLatLng,
     waypointLatLngs,
+    highlightedEntity,
   ]);
 
   // 2b. Render Active Route Highway Polyline (only redraws line without touching station markers)
@@ -558,7 +560,7 @@ export const InteractiveFleetMap = ({
     return L.divIcon({
       className: `custom-fleet-marker vehicle-marker ${isSelected ? 'selected-vehicle' : ''}`,
       html: `
-        <div class="relative flex items-center justify-center cursor-pointer group" data-vehicle-id="${vId}" data-vehicle-status="${rawStatus}" style="width: 36px; height: 36px;">
+        <div class="relative flex items-center justify-center cursor-pointer group" data-testid="vehicle-marker" data-vehicle-id="${vId}" data-vehicle-status="${rawStatus}" style="width: 36px; height: 36px;">
           ${pingClass ? `<span class="pointer-events-none absolute inline-flex h-full w-full rounded-2xl ${pingClass}"></span>` : ''}
           <div class="relative flex items-center justify-center w-8 h-8 rounded-xl bg-[#111114] border-2 shadow-2xl transition-transform group-hover:scale-110 ${selectedRing}" style="border-color: ${markerColor};">
             <svg class="w-4 h-4" style="color: ${markerColor};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

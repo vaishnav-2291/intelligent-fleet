@@ -799,6 +799,9 @@ export const FleetProvider = ({
   const [highlightMapEntity, setHighlightMapEntity] =
     useState(null);
 
+  const [activeRoute, setActiveRoute] =
+    useState(null);
+
   const [drivers, setDrivers] =
     useState(BASELINE_DRIVERS);
 
@@ -3419,6 +3422,8 @@ export const FleetProvider = ({
 
         highlightMapEntity,
         setHighlightMapEntity,
+        activeRoute,
+        setActiveRoute,
 
         stats,
         analysis,

@@ -280,4 +280,91 @@ test.describe('Operational Fleet AI: Direct Live Backend Execution', () => {
     const focusBtn = page.locator('[data-testid="chat-view-map-VH104"]');
     await expect(focusBtn).toBeVisible();
   });
+
+  // -------------------------------------------------------------------------
+  // 11. BROWSER UI INTEGRATION TEST: AI Route Optimization -> Dispatch Map
+  // -------------------------------------------------------------------------
+  test('11. AI Route Query synchronizes automatically with Dispatch & Routing Leaflet map', async ({ page }) => {
+    // 1. Sign in as Admin
+    await page.goto('/');
+    await page.click('button:has-text("Admin / Manager")');
+    await page.click('button:has-text("Sign In to System")');
+    await expect(page.locator('h1:has-text("Dashboard Overview")')).toBeVisible({ timeout: 15000 });
+
+    // 2. Open AI Chat Launcher
+    await page.click('[data-testid="ai-chat-launcher"]');
+    const chatPanel = page.locator('[data-testid="ai-chat-panel"]');
+    await expect(chatPanel).toBeVisible();
+
+    const input = page.locator('[data-testid="ai-chat-input"]');
+    await expect(input).toBeVisible();
+
+    // 3. Ask route optimization question
+    await input.fill('Optimize the route from Coimbatore to Chennai via Erode and Salem');
+    await page.click('[data-testid="ai-chat-send"]');
+
+    // 4. Verify AI response bubble succeeds
+    const aiMessage = page.locator('[data-testid="ai-chat-message"][data-sender="ai"]');
+    await expect(aiMessage.first()).toBeVisible({ timeout: 20000 });
+    const replyText = await aiMessage.first().innerText();
+
+    expect(replyText).not.toContain(FLEET_AI_UNAVAILABLE_MESSAGE);
+    expect(replyText).toContain('Route optimization completed successfully');
+    expect(replyText).toContain('Coimbatore');
+    expect(replyText).toContain('Chennai');
+    expect(replyText).toContain('Erode');
+    expect(replyText).toContain('Salem');
+
+    // 5. Verify action button is provided in AI chat message
+    const focusRouteBtn = page.locator('[data-testid="chat-view-focus-route"]');
+    await expect(focusRouteBtn).toBeVisible();
+
+    // 6. Verify Dispatch & Routing view is automatically active
+    await expect(page.locator('text=Dispatch & Corridor Routing')).toBeVisible({ timeout: 10000 });
+
+    // 7. Verify origin, destination, and waypoints in Dispatch & Routing
+    const originSelect = page.locator('[data-testid="origin-select"]');
+    await expect(originSelect).toHaveValue('Coimbatore');
+
+    const destSelect = page.locator('[data-testid="destination-select"]');
+    await expect(destSelect).toHaveValue('Chennai');
+
+    // Intermediate waypoints in the list
+    await expect(page.locator('text=Erode Waystation').first()).toBeVisible();
+    await expect(page.locator('text=Salem Waystation').first()).toBeVisible();
+
+    // 8. Verify Leaflet map renders origin, destination, and intermediate waypoint markers
+    await expect(page.locator('[data-testid="origin-marker"]')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="destination-marker"]')).toBeVisible({ timeout: 10000 });
+    const waypointMarkers = page.locator('[data-testid="waypoint-marker"]');
+    await expect(waypointMarkers.first()).toBeVisible({ timeout: 10000 });
+    expect(await waypointMarkers.count()).toBeGreaterThanOrEqual(2);
+
+    // 9. Verify actual OSRM road-following polyline appears
+    const polylines = page.locator('.leaflet-overlay-pane svg path');
+    await expect(polylines.first()).toBeVisible({ timeout: 15000 });
+    const pathCount = await polylines.count();
+    expect(pathCount).toBeGreaterThanOrEqual(2);
+
+    const pathD = await polylines.first().getAttribute('d');
+    expect(pathD).toBeTruthy();
+    const coordinateCommands = (pathD.match(/[ML]/g) || []).length;
+    // Highway polyline from Coimbatore to Chennai contains dozens to hundreds of geometry points
+    expect(coordinateCommands).toBeGreaterThan(20);
+
+    // 10. Verify Route Summary shows actual calculated distance and duration
+    await expect(page.locator('text=/\\d+\\s*km/').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/\\d+h\\s*\\d*m/').first()).toBeVisible();
+
+    // 11. Verify live vehicle and driver markers remain visible
+    const vehicleMarkers = page.locator('[data-testid="vehicle-marker"]');
+    const driverMarkers = page.locator('[data-testid="driver-marker"]');
+    expect(await vehicleMarkers.count()).toBeGreaterThan(0);
+    expect(await driverMarkers.count()).toBeGreaterThan(0);
+
+    // 12. Test clicking action button refocuses the route
+    await focusRouteBtn.click();
+    await expect(page.locator('[data-testid="origin-marker"]')).toBeVisible();
+    await expect(page.locator('[data-testid="destination-marker"]')).toBeVisible();
+  });
 });
