@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useId, useCallback } from 'react';
 import L from 'leaflet';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import maplibreGL from '@maplibre/maplibre-gl-leaflet';
 import { 
   getTownLatLng, 
   getCorridorDistanceKm, 
@@ -48,13 +50,9 @@ export const resolvePointCoords = (point) => {
   return getTownLatLng(str);
 };
 
-// Production basemap configuration: keyless OpenStreetMap raster tiles
-const OSM_BASEMAP = {
-  url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  attribution: '&copy; OpenStreetMap contributors',
-  subdomains: 'abc',
-  maxZoom: 19
-};
+// Production vector basemap configuration: keyless OpenFreeMap Liberty style (Google Maps-like road navigation)
+const OPENFREEMAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+const MAP_ATTRIBUTION = 'OpenFreeMap \u00a9 <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>';
 
 /**
  * Micro-offset coordinate disambiguation for co-located entities (e.g. dense fleet depots)
@@ -75,7 +73,7 @@ const getDisambiguatedLatLng = (lat, lng, index, totalAtCoord) => {
  * InteractiveFleetMap
  * 
  * Interactive Leaflet map component for Intelligent Fleet Management:
- * - High-clarity road-map base tiles (OpenStreetMap)
+ * - High-clarity road-map vector basemap (OpenFreeMap Liberty / MapLibre GL)
  * - Layered high-visibility active route highway lines (#00D2FF & #070A12)
  * - Distinct vehicle markers for travelling, idle, maintenance, and alert
  * - Clear monospace vehicle ID labels with live fuel status
@@ -174,16 +172,26 @@ export const InteractiveFleetMap = ({
       attributionControl: false,
     });
 
-    const tileLayer = L.tileLayer(OSM_BASEMAP.url, {
-      maxZoom: OSM_BASEMAP.maxZoom,
-      subdomains: OSM_BASEMAP.subdomains,
-      attribution: OSM_BASEMAP.attribution,
-      referrerPolicy: 'no-referrer',
-    }).addTo(map);
-
-    tileLayer.on('tileerror', () => {
-      // Non-fatal tile retry handling
-    });
+    // Keyless MapLibre GL vector basemap using OpenFreeMap Liberty style (clean Google Maps-like road navigation)
+    let tileLayer = null;
+    try {
+      const glOptions = {
+        style: OPENFREEMAP_STYLE,
+        attribution: MAP_ATTRIBUTION,
+        interactive: false,
+        pane: 'tilePane',
+      };
+      if (typeof L.maplibreGL === 'function') {
+        tileLayer = L.maplibreGL(glOptions);
+      } else if (typeof maplibreGL === 'function') {
+        tileLayer = maplibreGL(glOptions);
+      }
+      if (tileLayer) {
+        tileLayer.addTo(map);
+      }
+    } catch (glError) {
+      console.warn('[MapLibre GL]: Basemap initialization notice:', glError);
+    }
 
     tileLayerRef.current = tileLayer;
     polylineGroupRef.current = L.layerGroup().addTo(map);
@@ -1378,6 +1386,32 @@ export const InteractiveFleetMap = ({
           </div>
         </div>
       )}
+
+      {/* Map Attribution Badge */}
+      <div 
+        data-testid="map-attribution" 
+        className="absolute bottom-1 right-2 z-20 text-[9.5px] text-zinc-400/90 pointer-events-auto bg-[#16161A]/80 backdrop-blur-xs px-2 py-0.5 rounded border border-[#2A2A2E]/60 flex items-center space-x-1"
+      >
+        <span>OpenFreeMap</span>
+        <span>©</span>
+        <a 
+          href="https://www.openmaptiles.org/" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="underline hover:text-white"
+        >
+          OpenMapTiles
+        </a>
+        <span>Data from</span>
+        <a 
+          href="https://www.openstreetmap.org/copyright" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="underline hover:text-white"
+        >
+          OpenStreetMap
+        </a>
+      </div>
     </div>
   );
 };

@@ -16,6 +16,7 @@
     "auth:workbench": "node scripts/setup-workbench-auth.js"
   },
   "dependencies": {
+    "@maplibre/maplibre-gl-leaflet": "^0.1.4",
     "@tailwindcss/postcss": "^4.3.3",
     "autoprefixer": "^10.5.4",
     "bcryptjs": "^3.0.3",
@@ -26,6 +27,7 @@
     "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.38.0",
+    "maplibre-gl": "^6.10.0",
     "mongoose": "^9.10.1",
     "postcss": "^8.5.26",
     "react": "^19.2.8",

@@ -58,7 +58,7 @@ test.describe('Interactive Map & Route Optimization Tests', () => {
     await expect(legend).toContainText('OSRM ROAD NETWORK');
   });
 
-  test('Basemap regression check: tile layer is present, no API KEY REQUIRED watermark, and no mock terminology', async ({ page }) => {
+  test('Basemap regression check: vector basemap layer is present, no key-required watermark, and no mock terminology', async ({ page }) => {
     await page.goto('/');
     await page.click('button:has-text("Admin / Manager")');
     await page.click('button:has-text("Sign In to System")');
@@ -75,18 +75,17 @@ test.describe('Interactive Map & Route Optimization Tests', () => {
     const coordinateCommands = (pathD.match(/[ML]/g) || []).length;
     expect(coordinateCommands).toBeGreaterThan(15);
 
-    // 3. Tile layer is present in the DOM
+    // 3. Basemap layer is present in the DOM (MapLibre vector canvas or tile layer)
     const tilePane = page.locator('.leaflet-tile-pane');
     await expect(tilePane).toBeAttached({ timeout: 10000 });
-    const tiles = page.locator('.leaflet-tile-pane img');
-    await expect(tiles.first()).toBeAttached({ timeout: 10000 });
+    const basemapLayer = page.locator('.leaflet-tile-pane canvas, .leaflet-tile-pane .leaflet-gl-layer, .maplibregl-canvas, .leaflet-tile-pane img');
+    await expect(basemapLayer.first()).toBeAttached({ timeout: 10000 });
 
     // 4. Origin and Destination markers exist
     await expect(page.locator('[data-testid="origin-marker"]')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('[data-testid="destination-marker"]')).toBeVisible({ timeout: 10000 });
 
-    // 5. "API KEY REQUIRED" is strictly absent from the rendered map and document
-    await expect(page.locator('text=API KEY REQUIRED')).not.toBeVisible();
+    // 5. Key-required watermark is strictly absent from the rendered map and document
     await expect(page.locator('text=/api\\s*key\\s*required/i')).not.toBeVisible();
 
     // 6. No mock / demo / fake / MOBILE_GPS terminology in rendered UI
