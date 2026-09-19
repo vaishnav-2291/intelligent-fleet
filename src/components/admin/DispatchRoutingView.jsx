@@ -224,6 +224,7 @@ export const DispatchRoutingView = () => {
   const routeRequestIdRef = useRef(0);
   const abortControllerRef = useRef(null);
   const hasInitializedDriverRef = useRef(false);
+  const lastHandledHighlightRef = useRef(null);
 
   /**
    * Fetch road-following highway route with strict async race protection.
@@ -446,7 +447,8 @@ export const DispatchRoutingView = () => {
 
   // Synchronize AI Chat or Roster Highlighted Entity with Live Map
   useEffect(() => {
-    if (highlightMapEntity) {
+    if (highlightMapEntity && highlightMapEntity !== lastHandledHighlightRef.current) {
+      lastHandledHighlightRef.current = highlightMapEntity;
       if (highlightMapEntity.type === 'route') {
         const orig = highlightMapEntity.origin;
         const dest = highlightMapEntity.destination;

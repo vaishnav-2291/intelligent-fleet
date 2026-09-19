@@ -213,6 +213,9 @@ export const InteractiveFleetMap = ({
     stationsGroupRef.current = L.layerGroup().addTo(map);
     fleetGroupRef.current = L.layerGroup().addTo(map);
     mapInstanceRef.current = map;
+    if (mapContainerRef.current) {
+      mapContainerRef.current._leaflet_map = map;
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       if (mapInstanceRef.current) {
@@ -230,6 +233,9 @@ export const InteractiveFleetMap = ({
     return () => {
       clearTimeout(t);
       resizeObserver.disconnect();
+      if (mapContainerRef.current) {
+        delete mapContainerRef.current._leaflet_map;
+      }
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -286,7 +292,6 @@ export const InteractiveFleetMap = ({
     if (!map || !group) return;
 
     group.clearLayers();
-    const boundsPoints = [];
 
     // A. Origin Marker (Dispatch Hub A - Emerald)
     if (originLatLng) {
@@ -329,7 +334,6 @@ export const InteractiveFleetMap = ({
       `, { maxWidth: 320, minWidth: 280, autoPan: true, autoPanPaddingTopLeft: [70, 110], autoPanPaddingBottomRight: [70, 70] });
       
       originMarker.addTo(group);
-      boundsPoints.push(originLatLng);
     }
 
     // B. Destination Marker (Delivery Station B - Cyan)
@@ -373,7 +377,6 @@ export const InteractiveFleetMap = ({
       `, { maxWidth: 320, minWidth: 280, autoPan: true, autoPanPaddingTopLeft: [70, 110], autoPanPaddingBottomRight: [70, 70] });
 
       destMarker.addTo(group);
-      boundsPoints.push(destLatLng);
     }
 
     // C. Waypoint Markers (#1, #2... - Amber)
@@ -421,26 +424,8 @@ export const InteractiveFleetMap = ({
       `, { maxWidth: 320, minWidth: 280, autoPan: true, autoPanPaddingTopLeft: [70, 110], autoPanPaddingBottomRight: [70, 70] });
 
       wpMarker.addTo(group);
-      boundsPoints.push(latLng);
     });
 
-    // Auto-fit route bounds with balanced padding on corridor station change or route highlight focus
-    const isRouteHighlight = highlightedEntity?.type === 'route';
-    if (boundsPoints.length > 1 && (!highlightedEntity || isRouteHighlight)) {
-      const boundsKey = boundsPoints.map(p => `${p[0].toFixed(3)},${p[1].toFixed(3)}`).join(';') + (isRouteHighlight ? `_route_${highlightedEntity.timestamp || ''}` : '');
-      if (boundsKey !== lastFittedBoundsKeyRef.current) {
-        lastFittedBoundsKeyRef.current = boundsKey;
-        const bounds = L.latLngBounds(boundsPoints);
-        map.fitBounds(bounds, {
-          paddingTopLeft: [70, 110],
-          paddingBottomRight: [70, 70],
-          maxZoom: 14,
-          animate: true,
-        });
-      }
-    } else if (boundsPoints.length === 1 && (!highlightedEntity || isRouteHighlight)) {
-      map.setView(boundsPoints[0], 12, { animate: true });
-    }
   }, [
     origin,
     destination,
@@ -448,7 +433,6 @@ export const InteractiveFleetMap = ({
     originLatLng,
     destLatLng,
     waypointLatLngs,
-    highlightedEntity,
   ]);
 
   // 2b. Render Active Route Highway Polyline (only redraws line without touching station markers)
@@ -508,6 +492,158 @@ export const InteractiveFleetMap = ({
       );
     }
   }, [routeGeometry]);
+
+  /**
+   * Computes unified LatLngBounds combining:
+   * 1. Origin marker coordinates (originLatLng)
+   * 2. Destination marker coordinates (destLatLng)
+   * 3. All intermediate waypoint marker coordinates (waypointLatLngs)
+   * 4. Full road-following highway route geometry (routeGeometry or highlightedEntity.routeGeometry)
+   *
+   * If routeGeometry is unavailable, reliably falls back to marker bounds only.
+   */
+  const computeCorridorBounds = useCallback(() => {
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+    let pointCount = 0;
+
+    const includePoint = (pt) => {
+      if (!pt) return;
+      let lat = null;
+      let lng = null;
+      if (Array.isArray(pt) && pt.length >= 2 && typeof pt[0] === 'number' && typeof pt[1] === 'number') {
+        lat = pt[0];
+        lng = pt[1];
+      } else if (typeof pt === 'object') {
+        lat = pt.lat ?? pt.latitude;
+        lng = pt.lng ?? pt.longitude;
+      }
+      if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+        pointCount++;
+      }
+    };
+
+    // 1. Origin Hub Marker
+    if (originLatLng) includePoint(originLatLng);
+
+    // 2. Destination Station Marker
+    if (destLatLng) includePoint(destLatLng);
+
+    // 3. Intermediate Waypoint Markers
+    if (Array.isArray(waypointLatLngs)) {
+      for (let i = 0; i < waypointLatLngs.length; i++) {
+        includePoint(waypointLatLngs[i]);
+      }
+    }
+
+    // 4. Explicit AI Route Entity Stops (guarantees complete framing during AI route focus)
+    if (highlightedEntity?.type === 'route') {
+      if (highlightedEntity.origin) includePoint(resolvePointCoords(highlightedEntity.origin));
+      if (highlightedEntity.destination) includePoint(resolvePointCoords(highlightedEntity.destination));
+      if (Array.isArray(highlightedEntity.waypoints)) {
+        highlightedEntity.waypoints.forEach(wp => includePoint(resolvePointCoords(wp)));
+      }
+      if (Array.isArray(highlightedEntity.optimizedStops)) {
+        highlightedEntity.optimizedStops.forEach(stop => includePoint(resolvePointCoords(stop)));
+      }
+    }
+
+    // 5. Full road-following highway route geometry (OSRM high-density points)
+    const activeRouteGeometry = (Array.isArray(routeGeometry) && routeGeometry.length > 1)
+      ? routeGeometry
+      : (Array.isArray(highlightedEntity?.routeGeometry) && highlightedEntity.routeGeometry.length > 1
+          ? highlightedEntity.routeGeometry
+          : null);
+
+    const hasRouteGeometry = Boolean(activeRouteGeometry && activeRouteGeometry.length > 1);
+    if (hasRouteGeometry) {
+      for (let i = 0; i < activeRouteGeometry.length; i++) {
+        includePoint(activeRouteGeometry[i]);
+      }
+    }
+
+    if (pointCount === 0) return null;
+
+    const bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
+    return {
+      bounds,
+      pointCount,
+      hasRouteGeometry,
+      geometryLength: hasRouteGeometry ? activeRouteGeometry.length : 0,
+      minLat,
+      maxLat,
+      minLng,
+      maxLng,
+      singlePoint: pointCount === 1 ? [minLat, minLng] : null
+    };
+  }, [originLatLng, destLatLng, waypointLatLngs, routeGeometry, highlightedEntity]);
+
+  // 2c. Auto-Fit Viewport to Complete Route Geometry and Corridor Station Markers
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const isRouteHighlight = highlightedEntity?.type === 'route';
+
+    // If an entity is highlighted that is NOT a route (e.g. vehicle or driver focus), skip corridor auto-fit
+    if (highlightedEntity && !isRouteHighlight) {
+      return;
+    }
+
+    const corridorInfo = computeCorridorBounds();
+    if (!corridorInfo || !corridorInfo.bounds.isValid()) return;
+
+    const { bounds, hasRouteGeometry, geometryLength, minLat, maxLat, minLng, maxLng, singlePoint } = corridorInfo;
+
+    // Stable signature: only refits when origin/destination/waypoints change, routeGeometry arrives/changes,
+    // or an AI route highlight arrives. Never refits on vehicle/driver polling updates.
+    const boundsKey = [
+      minLat.toFixed(4),
+      minLng.toFixed(4),
+      maxLat.toFixed(4),
+      maxLng.toFixed(4),
+      hasRouteGeometry ? `geom_${geometryLength}` : 'markers_only',
+      isRouteHighlight ? `hl_${highlightedEntity.timestamp || highlightedEntity.id || 'route'}` : ''
+    ].join(';');
+
+    if (boundsKey === lastFittedBoundsKeyRef.current) {
+      return;
+    }
+    lastFittedBoundsKeyRef.current = boundsKey;
+
+    // Stop in-flight camera transitions and update container geometry
+    map.stop();
+    map.invalidateSize(false);
+
+    if (singlePoint && !hasRouteGeometry) {
+      map.setView(singlePoint, 12, { animate: false });
+    } else {
+      // Balanced padding ensuring complete route (including origin, all waypoints, destination, and polyline)
+      // is comfortably visible without being obscured by floating controls or legends
+      map.fitBounds(bounds, {
+        paddingTopLeft: [75, 75],
+        paddingBottomRight: [75, 75],
+        maxZoom: 13,
+        animate: false,
+      });
+    }
+  }, [
+    computeCorridorBounds,
+    routeGeometry,
+    highlightedEntity,
+    origin,
+    destination,
+    waypoints,
+    originLatLng,
+    destLatLng,
+    waypointLatLngs,
+  ]);
 
   // Helper to construct Vehicle DivIcon HTML
   const createVehicleIcon = useCallback((vId, status, fuel, isSelected) => {
@@ -1071,23 +1207,22 @@ export const InteractiveFleetMap = ({
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    const points = [];
-    if (originLatLng) points.push(originLatLng);
-    if (destLatLng) points.push(destLatLng);
-    waypointLatLngs.forEach(p => points.push(p));
-    if (Array.isArray(routeGeometry) && routeGeometry.length > 1) {
-      routeGeometry.forEach(p => points.push(p));
-    }
+    const corridorInfo = computeCorridorBounds();
+    if (!corridorInfo || !corridorInfo.bounds.isValid()) return;
 
-    if (points.length > 1) {
-      map.fitBounds(L.latLngBounds(points), {
-        paddingTopLeft: [70, 110],
-        paddingBottomRight: [70, 70],
-        maxZoom: 14,
-        animate: true,
+    const { bounds, hasRouteGeometry, singlePoint } = corridorInfo;
+    map.stop();
+    map.invalidateSize(false);
+
+    if (singlePoint && !hasRouteGeometry) {
+      map.setView(singlePoint, 12, { animate: false });
+    } else {
+      map.fitBounds(bounds, {
+        paddingTopLeft: [75, 75],
+        paddingBottomRight: [75, 75],
+        maxZoom: 13,
+        animate: false,
       });
-    } else if (points.length === 1) {
-      map.setView(points[0], 12, { animate: true });
     }
   };
 

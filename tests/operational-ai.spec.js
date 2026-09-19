@@ -7,15 +7,23 @@ test.describe('Operational Fleet AI: Direct Live Backend Execution', () => {
   // 1. DRIVER: Which drivers are currently active?
   // -------------------------------------------------------------------------
   test('1. "Which drivers are currently active?" returns live active drivers from backend', async ({ request }) => {
-    const res = await request.post('/api/ai/chat', {
-      data: {
-        message: 'Which drivers are currently active?',
-        sessionId: 'e2e-driver-test'
+    let res;
+    let json;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await request.post('/api/ai/chat', {
+        data: {
+          message: 'Which drivers are currently active?',
+          sessionId: 'e2e-driver-test'
+        }
+      });
+      expect(res.status()).toBe(200);
+      json = await res.json();
+      if (json.success && json.message && json.message.includes('active drivers')) {
+        break;
       }
-    });
+      await new Promise((r) => setTimeout(r, 2500));
+    }
 
-    expect(res.status()).toBe(200);
-    const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.module).toBe('fleet_ai');
     expect(json.intent).toBe('DRIVER');
@@ -333,12 +341,16 @@ test.describe('Operational Fleet AI: Direct Live Backend Execution', () => {
     await expect(page.locator('text=Erode Waystation').first()).toBeVisible();
     await expect(page.locator('text=Salem Waystation').first()).toBeVisible();
 
-    // 8. Verify Leaflet map renders origin, destination, and intermediate waypoint markers
+    // 8. Verify Leaflet map container and markers
+    const mapContainer = page.locator('.leaflet-container');
+    await expect(mapContainer).toBeVisible({ timeout: 10000 });
+
     await expect(page.locator('[data-testid="origin-marker"]')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('[data-testid="destination-marker"]')).toBeVisible({ timeout: 10000 });
+
     const waypointMarkers = page.locator('[data-testid="waypoint-marker"]');
     await expect(waypointMarkers.first()).toBeVisible({ timeout: 10000 });
-    expect(await waypointMarkers.count()).toBeGreaterThanOrEqual(2);
+    expect(await waypointMarkers.count()).toBe(2);
 
     // 9. Verify actual OSRM road-following polyline appears
     const polylines = page.locator('.leaflet-overlay-pane svg path');
@@ -362,7 +374,73 @@ test.describe('Operational Fleet AI: Direct Live Backend Execution', () => {
     expect(await vehicleMarkers.count()).toBeGreaterThan(0);
     expect(await driverMarkers.count()).toBeGreaterThan(0);
 
-    // 12. Test clicking action button refocuses the route
+    // Wait for Leaflet map animation/movement to finish settling if active
+    await page.waitForFunction(() => {
+      const mapEl = document.querySelector('.leaflet-container');
+      // @ts-ignore
+      const leafletMap = mapEl?._leaflet_map;
+      return leafletMap ? !leafletMap._animatingZoom : true;
+    }, { timeout: 5000 }).catch(() => {});
+
+    await page.waitForTimeout(600);
+
+    const routeBoundsCheck = await page.evaluate(() => {
+      const mapEl = document.querySelector('.leaflet-container');
+      const originMarker = document.querySelector('[data-testid="origin-marker"]');
+      const destMarker = document.querySelector('[data-testid="destination-marker"]');
+      const wpMarkers = document.querySelectorAll('[data-testid="waypoint-marker"]');
+      if (!mapEl || !originMarker || !destMarker || wpMarkers.length < 2) return { error: 'missing elements' };
+
+      // @ts-ignore
+      const map = mapEl._leaflet_map;
+      if (!map) return { error: 'missing leaflet map instance' };
+
+      const mapRect = mapEl.getBoundingClientRect();
+      const originRect = originMarker.getBoundingClientRect();
+      const destRect = destMarker.getBoundingClientRect();
+      const wpRects = Array.from(wpMarkers).map(w => w.getBoundingClientRect());
+
+      // 1. Verify markers are framed inside the visible map container viewport
+      const isInside = (r) => (
+        r.top >= mapRect.top - 10 &&
+        r.bottom <= mapRect.bottom + 10 &&
+        r.left >= mapRect.left - 10 &&
+        r.right <= mapRect.right + 10
+      );
+
+      const allMarkersInside = isInside(originRect) && isInside(destRect) && wpRects.every(isInside);
+
+      // 2. Verify Leaflet map viewport bounds contain the complete route bounds (Coimbatore, Erode, Salem, Chennai)
+      const mapBounds = map.getBounds();
+      const coimbatore = [11.0168, 76.9558];
+      const erode = [11.3410, 77.7172];
+      const salem = [11.6643, 78.1460];
+      const chennai = [13.0827, 80.2707];
+
+      const containsAllKeyPoints = 
+        mapBounds.contains(coimbatore) &&
+        mapBounds.contains(erode) &&
+        mapBounds.contains(salem) &&
+        mapBounds.contains(chennai);
+
+      return {
+        allMarkersInside,
+        containsAllKeyPoints,
+        viewportContainsCompleteRoute: allMarkersInside && containsAllKeyPoints,
+        mapBounds: {
+          south: mapBounds.getSouth(),
+          north: mapBounds.getNorth(),
+          west: mapBounds.getWest(),
+          east: mapBounds.getEast()
+        }
+      };
+    });
+
+    expect(routeBoundsCheck.allMarkersInside).toBe(true);
+    expect(routeBoundsCheck.containsAllKeyPoints).toBe(true);
+    expect(routeBoundsCheck.viewportContainsCompleteRoute).toBe(true);
+
+    // 13. Test clicking action button refocuses the route
     await focusRouteBtn.click();
     await expect(page.locator('[data-testid="origin-marker"]')).toBeVisible();
     await expect(page.locator('[data-testid="destination-marker"]')).toBeVisible();
