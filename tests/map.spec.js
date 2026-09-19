@@ -58,7 +58,14 @@ test.describe('Interactive Map & Route Optimization Tests', () => {
     await expect(legend).toContainText('OSRM ROAD NETWORK');
   });
 
-  test('Basemap regression check: vector basemap layer is present, no key-required watermark, and no mock terminology', async ({ page }) => {
+  test('Basemap regression check: MapLibre vector layer exists, OpenFreeMap style configured, no blocked watermark, and route intact', async ({ page }) => {
+    let openFreeMapRequested = false;
+    page.on('request', request => {
+      if (request.url().includes('tiles.openfreemap.org/styles/liberty')) {
+        openFreeMapRequested = true;
+      }
+    });
+
     await page.goto('/');
     await page.click('button:has-text("Admin / Manager")');
     await page.click('button:has-text("Sign In to System")');
@@ -68,27 +75,40 @@ test.describe('Interactive Map & Route Optimization Tests', () => {
     const mapContainer = page.locator('.leaflet-container');
     await expect(mapContainer).toBeVisible({ timeout: 10000 });
 
-    // 2. Route polyline is visible and has multiple geometry points
+    // 2. Leaflet route polyline still exists and has multiple road geometry points
     const polylines = page.locator('.leaflet-overlay-pane svg path');
     await expect(polylines.first()).toBeVisible({ timeout: 10000 });
     const pathD = await polylines.first().getAttribute('d');
     const coordinateCommands = (pathD.match(/[ML]/g) || []).length;
     expect(coordinateCommands).toBeGreaterThan(15);
 
-    // 3. Basemap layer is present in the DOM (MapLibre vector canvas or tile layer)
+    // 3. MapLibre GL layer exists in the DOM
     const tilePane = page.locator('.leaflet-tile-pane');
     await expect(tilePane).toBeAttached({ timeout: 10000 });
-    const basemapLayer = page.locator('.leaflet-tile-pane canvas, .leaflet-tile-pane .leaflet-gl-layer, .maplibregl-canvas, .leaflet-tile-pane img');
-    await expect(basemapLayer.first()).toBeAttached({ timeout: 10000 });
+    const glLayer = page.locator('.leaflet-tile-pane .leaflet-gl-layer, .leaflet-tile-pane canvas, .maplibregl-canvas');
+    await expect(glLayer.first()).toBeAttached({ timeout: 10000 });
 
-    // 4. Origin and Destination markers exist
+    // 4. OpenFreeMap style URL is configured on the MapLibre layer
+    const configuredStyle = await page.evaluate(() => {
+      const mapEl = document.querySelector('.leaflet-container');
+      if (!mapEl || !mapEl._leaflet_map) return null;
+      let found = null;
+      mapEl._leaflet_map.eachLayer(l => {
+        if (l.options && l.options.style) found = l.options.style;
+      });
+      return found;
+    });
+    expect(configuredStyle).toBe('https://tiles.openfreemap.org/styles/liberty');
+
+    // 5. Origin and Destination markers exist
     await expect(page.locator('[data-testid="origin-marker"]')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('[data-testid="destination-marker"]')).toBeVisible({ timeout: 10000 });
 
-    // 5. Key-required watermark is strictly absent from the rendered map and document
+    // 6. No key-required or access-blocked watermarks
     await expect(page.locator('text=/api\\s*key\\s*required/i')).not.toBeVisible();
+    await expect(page.locator('text=/access\\s*blocked/i')).not.toBeVisible();
 
-    // 6. No mock / demo / fake / MOBILE_GPS terminology in rendered UI
+    // 7. No mock / demo / fake / MOBILE_GPS terminology in rendered UI
     const bodyText = await page.locator('body').innerText();
     expect(bodyText).not.toMatch(/\b(MOCK_DEMO|Fake GPS|Mock Data|Demo Simulation|MOBILE_GPS)\b/i);
   });

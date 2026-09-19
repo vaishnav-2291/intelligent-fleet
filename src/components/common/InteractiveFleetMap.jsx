@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useId, useCallback } from 'react';
 import L from 'leaflet';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import maplibreGL from '@maplibre/maplibre-gl-leaflet';
+import { maplibreGL } from '@maplibre/maplibre-gl-leaflet';
 import { 
   getTownLatLng, 
   getCorridorDistanceKm, 
@@ -51,7 +51,6 @@ export const resolvePointCoords = (point) => {
 };
 
 // Production vector basemap configuration: keyless OpenFreeMap Liberty style (Google Maps-like road navigation)
-const OPENFREEMAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const MAP_ATTRIBUTION = 'OpenFreeMap \u00a9 <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>';
 
 /**
@@ -163,6 +162,9 @@ export const InteractiveFleetMap = ({
     const map = L.map(mapContainerRef.current, {
       center: defaultCenter,
       zoom: defaultZoom,
+      minZoom: 1,
+      maxBounds: [[180, -Infinity], [-180, Infinity]],
+      maxBoundsViscosity: 1,
       zoomControl: false, // Custom floating controls
       closePopupOnClick: false, // Keeps popups open during route and bounds updates
       scrollWheelZoom: interactive,
@@ -172,28 +174,14 @@ export const InteractiveFleetMap = ({
       attributionControl: false,
     });
 
-    // Keyless MapLibre GL vector basemap using OpenFreeMap Liberty style (clean Google Maps-like road navigation)
-    let tileLayer = null;
-    try {
-      const glOptions = {
-        style: OPENFREEMAP_STYLE,
-        attribution: MAP_ATTRIBUTION,
-        interactive: false,
-        pane: 'tilePane',
-      };
-      if (typeof L.maplibreGL === 'function') {
-        tileLayer = L.maplibreGL(glOptions);
-      } else if (typeof maplibreGL === 'function') {
-        tileLayer = maplibreGL(glOptions);
-      }
-      if (tileLayer) {
-        tileLayer.addTo(map);
-      }
-    } catch (glError) {
-      console.warn('[MapLibre GL]: Basemap initialization notice:', glError);
-    }
+    const gl = maplibreGL({
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      interactive: false,
+      pane: 'tilePane',
+      attribution: MAP_ATTRIBUTION,
+    }).addTo(map);
 
-    tileLayerRef.current = tileLayer;
+    tileLayerRef.current = gl;
     polylineGroupRef.current = L.layerGroup().addTo(map);
     stationsGroupRef.current = L.layerGroup().addTo(map);
     fleetGroupRef.current = L.layerGroup().addTo(map);
