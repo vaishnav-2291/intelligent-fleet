@@ -14,7 +14,6 @@ import {
   Minus, 
   Maximize2, 
   Minimize2,
-  Layers, 
   RotateCw, 
   Eye
 } from 'lucide-react';
@@ -49,31 +48,12 @@ export const resolvePointCoords = (point) => {
   return getTownLatLng(str);
 };
 
-// Basemap configurations with verified high-contrast road styling
-const BASEMAPS = {
-  voyager: {
-    name: 'Road Navigation',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OpenStreetMap contributors, &copy; CARTO',
-    subdomains: 'abcd',
-    maxZoom: 20,
-    detectRetina: true
-  },
-  dark: {
-    name: 'Dark Operations',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OpenStreetMap contributors, &copy; CARTO',
-    subdomains: 'abcd',
-    maxZoom: 20,
-    detectRetina: true
-  },
-  osm: {
-    name: 'OpenStreetMap',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors',
-    subdomains: 'abc',
-    maxZoom: 19
-  }
+// Production basemap configuration: keyless OpenStreetMap raster tiles
+const OSM_BASEMAP = {
+  url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution: '&copy; OpenStreetMap contributors',
+  subdomains: 'abc',
+  maxZoom: 19
 };
 
 /**
@@ -95,7 +75,7 @@ const getDisambiguatedLatLng = (lat, lng, index, totalAtCoord) => {
  * InteractiveFleetMap
  * 
  * Interactive Leaflet map component for Intelligent Fleet Management:
- * - High-clarity road-map base tiles (CartoDB Voyager / Dark Matter / OSM)
+ * - High-clarity road-map base tiles (OpenStreetMap)
  * - Layered high-visibility active route highway lines (#00D2FF & #070A12)
  * - Distinct vehicle markers for travelling, idle, maintenance, and alert
  * - Clear monospace vehicle ID labels with live fuel status
@@ -145,7 +125,6 @@ export const InteractiveFleetMap = ({
   const vehicleMarkersMapRef = useRef(new Map());
   const driverMarkersMapRef = useRef(new Map());
 
-  const [activeBasemap, setActiveBasemap] = useState('voyager'); // 'voyager' | 'dark' | 'osm'
   const [legendCollapsed, setLegendCollapsed] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -195,12 +174,10 @@ export const InteractiveFleetMap = ({
       attributionControl: false,
     });
 
-    const basemapConfig = BASEMAPS[activeBasemap] || BASEMAPS.voyager;
-    const tileLayer = L.tileLayer(basemapConfig.url, {
-      maxZoom: basemapConfig.maxZoom || 19,
-      subdomains: basemapConfig.subdomains || 'abcd',
-      attribution: basemapConfig.attribution,
-      detectRetina: Boolean(basemapConfig.detectRetina),
+    const tileLayer = L.tileLayer(OSM_BASEMAP.url, {
+      maxZoom: OSM_BASEMAP.maxZoom,
+      subdomains: OSM_BASEMAP.subdomains,
+      attribution: OSM_BASEMAP.attribution,
       referrerPolicy: 'no-referrer',
     }).addTo(map);
 
@@ -259,31 +236,7 @@ export const InteractiveFleetMap = ({
     }
   }, [isFullscreen]);
 
-  // Handle Basemap Switch smoothly
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
 
-    const basemapConfig = BASEMAPS[activeBasemap] || BASEMAPS.voyager;
-    if (tileLayerRef.current) {
-      map.removeLayer(tileLayerRef.current);
-    }
-    const newTileLayer = L.tileLayer(basemapConfig.url, {
-      maxZoom: basemapConfig.maxZoom || 19,
-      subdomains: basemapConfig.subdomains || 'abcd',
-      attribution: basemapConfig.attribution,
-      detectRetina: Boolean(basemapConfig.detectRetina),
-      referrerPolicy: 'no-referrer',
-    }).addTo(map);
-
-    newTileLayer.on('tileerror', () => {
-      // Non-fatal
-    });
-
-    // Ensure tile layer stays beneath routes and markers
-    newTileLayer.bringToBack();
-    tileLayerRef.current = newTileLayer;
-  }, [activeBasemap]);
 
   // 2a. Render Corridor Stations (Origin Hub, Destination Terminal, Waypoints)
   useEffect(() => {
@@ -1230,13 +1183,7 @@ export const InteractiveFleetMap = ({
     setIsFullscreen(prev => !prev);
   };
 
-  const toggleBasemap = () => {
-    setActiveBasemap(prev => {
-      if (prev === 'voyager') return 'dark';
-      if (prev === 'dark') return 'osm';
-      return 'voyager';
-    });
-  };
+
 
   const hasValidCoordinates = Boolean(
     originLatLng || 
@@ -1350,15 +1297,7 @@ export const InteractiveFleetMap = ({
           >
             <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
           </button>
-          <button
-            type="button"
-            onClick={toggleBasemap}
-            aria-label="Toggle Basemap Style"
-            title={`Current: ${BASEMAPS[activeBasemap]?.name || 'Basemap'}. Click to toggle.`}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-[#F5F5F5] hover:bg-[#252528] active:scale-95 transition-all"
-          >
-            <Layers className={`w-3.5 h-3.5 ${activeBasemap === 'voyager' ? 'text-amber-400' : activeBasemap === 'dark' ? 'text-cyan-400' : 'text-emerald-400'}`} />
-          </button>
+
           <button
             type="button"
             onClick={toggleFullscreen}
